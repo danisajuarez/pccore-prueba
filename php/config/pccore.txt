@@ -1,0 +1,22 @@
+; Configuración PC Core
+; ======================
+
+; WooCommerce
+wc_url=https://pccore.com.ar/wp-json/wc/v3
+wc_key=ck_28e04bbb3d5000fb9240cac6bb64ad2597aff0df
+wc_secret=cs_b6442994d793997f0f9c829b8cdf3c38b3231c28
+
+; Base de datos SIGE
+db_host=186.136.6.20
+db_port=3307
+db_user=demo
+db_pass=demo
+db_name=pccore
+
+; Configuración SIGE
+lista_precio=2
+deposito=1
+
+; Login admin
+admin_user=admin
+admin_pass=pccore2024

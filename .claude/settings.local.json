@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-ChildItem ''C:\\\\Users\\\\danis\\\\pccore\\\\*.pdf''\")",
+      "Bash(powershell -Command:*)",
+      "Bash(curl:*)",
+      "Bash(mysql -h remoto.retec.com.ar -P 3307 -u danisa -pdanisa2025 -e \"SHOW TABLES;\" lt)",
+      "Bash(vercel --version:*)",
+      "Bash(cmd /c \"npx vercel login\")",
+      "WebFetch(domain:woocommerce.github.io)",
+      "Bash(dir:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:pccore.antartidasige.com)",
+      "Bash(tree:*)",
+      "Bash(php -v:*)",
+      "Bash(npm install)",
+      "Bash(cmd.exe /c \"npm install\")",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c where:*)",
+      "Bash(cmd.exe /c npm install)",
+      "Bash(cmd.exe /c npm run dev)",
+      "Bash(cmd.exe /c timeout /t 3 /nobreak)",
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\danis\\\\pccore-prueba\\\\php && php -S localhost:3000\")",
+      "Bash(cmd.exe /c php -S localhost:3000 -t C:Usersdanispccore-pruebaphp)",
+      "Bash(cmd.exe /c \"php -S localhost:3000 -t C:/Users/danis/pccore-prueba/php\")",
+      "Bash(php -S:*)",
+      "Bash(powershell.exe -Command \"php -S localhost:3000 -t ''C:\\\\Users\\\\danis\\\\pccore-prueba\\\\php''\")",
+      "WebSearch",
+      "Bash(mysql:*)",
+      "Bash(git remote:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nMigrar a proyecto PHP para WooCommerce\n\n- Eliminar proyecto Node.js\n- Adaptar login para usar credenciales de config\n- Adaptar product-search para buscar directo en WooCommerce\n- Agregar configuracion portalgcom\n- Desactivar verificacion SSL para desarrollo\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
