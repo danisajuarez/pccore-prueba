@@ -592,8 +592,8 @@ header('Content-Type: text/html; charset=utf-8');
         function mostrarProducto() {
             document.getElementById('prodNombre').textContent = productoActual.nombre;
             document.getElementById('prodSku').textContent = productoActual.sku;
-            document.getElementById('prodPrecio').textContent = '$ ' + Number(productoActual.precio).toLocaleString('es-AR');
-            document.getElementById('prodPrecioSinIva').textContent = '$ ' + Number(productoActual.precio_sin_iva).toLocaleString('es-AR');
+            document.getElementById('prodPrecio').textContent = '$ ' + Number(productoActual.precio).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('prodPrecioSinIva').textContent = '$ ' + Number(productoActual.precio_sin_iva).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             document.getElementById('prodStock').textContent = productoActual.stock + ' unidades';
             document.getElementById('prodPeso').textContent = productoActual.peso ? productoActual.peso + ' kg' : 'No especificado';
 

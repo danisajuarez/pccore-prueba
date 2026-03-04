@@ -167,7 +167,7 @@ header('Content-Type: text/html; charset=utf-8');
             <div class="error"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
 
-        <form method="POST" action="?cliente=<?= htmlspecialchars($CLIENTE_ID) ?>">
+        <form method="POST">
             <div class="form-group">
                 <label for="user">Usuario</label>
                 <input type="text" id="user" name="user" placeholder="Ingresa tu usuario" required autofocus>

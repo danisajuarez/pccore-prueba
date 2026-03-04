@@ -126,17 +126,51 @@ function checkSession() {
     }
 }
 
-// Validar login contra credenciales del config
+// Validar login contra tabla sige_usu_usuario
 function validateLogin($user, $pass) {
-    // Usar credenciales del archivo de configuracion
-    if ($user === ADMIN_USER && $pass === ADMIN_PASS) {
-        return [
-            'USU_IDUsuario' => 1,
-            'USU_LogUsu' => $user,
-            'USU_DatosUsu' => 'Administrador'
-        ];
+    try {
+        $conn = getDbConnection();
+
+        // Buscar usuario en la tabla sige_usu_usuario
+        $stmt = $conn->prepare("SELECT USU_IDUsuario, USU_LogUsu, USU_DatosUsu, USU_Habilitado
+                                FROM sige_usu_usuario
+                                WHERE USU_LogUsu = ? AND USU_PassWord = ?");
+        $stmt->bind_param("ss", $user, $pass);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($row = $result->fetch_assoc()) {
+            // Verificar si el usuario está habilitado
+            if ($row['USU_Habilitado'] !== 'S') {
+                $stmt->close();
+                $conn->close();
+                return false;
+            }
+
+            $stmt->close();
+            $conn->close();
+            return [
+                'USU_IDUsuario' => $row['USU_IDUsuario'],
+                'USU_LogUsu' => $row['USU_LogUsu'],
+                'USU_DatosUsu' => $row['USU_DatosUsu']
+            ];
+        }
+
+        $stmt->close();
+        $conn->close();
+        return false;
+
+    } catch (Exception $e) {
+        // Si falla la conexión a BD, intentar con credenciales del config como fallback
+        if ($user === ADMIN_USER && $pass === ADMIN_PASS) {
+            return [
+                'USU_IDUsuario' => 1,
+                'USU_LogUsu' => $user,
+                'USU_DatosUsu' => 'Administrador'
+            ];
+        }
+        return false;
     }
-    return false;
 }
 
 // Hacer request a WooCommerce

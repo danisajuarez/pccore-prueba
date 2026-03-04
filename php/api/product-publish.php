@@ -92,7 +92,7 @@ try {
         }
     }
 
-    $db->close()
+    $db->close();
 
     // Validar que tiene datos mínimos
     if (empty($producto['nombre'])) {
@@ -160,12 +160,32 @@ try {
         $productData['attributes'] = $wcAttributes;
     }
 
-    // Crear en WooCommerce
-    $response = wcRequest('/products', 'POST', $productData);
+    // Verificar si el producto ya existe en WooCommerce
+    $wcProducts = wcRequest('/products?sku=' . urlencode($producto['sku']));
+    $existingProduct = null;
+
+    if (!empty($wcProducts)) {
+        foreach ($wcProducts as $p) {
+            if ($p['sku'] === $producto['sku']) {
+                $existingProduct = $p;
+                break;
+            }
+        }
+    }
+
+    if ($existingProduct) {
+        // Actualizar producto existente
+        $response = wcRequest('/products/' . $existingProduct['id'], 'PUT', $productData);
+        $mensaje = 'Producto actualizado en WooCommerce';
+    } else {
+        // Crear nuevo producto
+        $response = wcRequest('/products', 'POST', $productData);
+        $mensaje = 'Producto creado en WooCommerce';
+    }
 
     echo json_encode([
         'success' => true,
-        'message' => 'Producto creado en WooCommerce',
+        'message' => $mensaje,
         'product' => [
             'id' => $response['id'],
             'sku' => $response['sku'],
