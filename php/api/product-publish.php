@@ -1,6 +1,43 @@
 <?php
+/**
+ * API: Publicar producto en WooCommerce
+ *
+ * Crea o actualiza un producto en WooCommerce desde SIGE
+ */
+
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../config/mercadolibre.php';
 checkAuth();
+
+/**
+ * Buscar o crear una categoría en WooCommerce
+ * @param string $nombre Nombre de la categoría
+ * @param int $parentId ID de la categoría padre (0 = raíz)
+ * @return int|null ID de la categoría
+ */
+function buscarOCrearCategoria($nombre, $parentId = 0) {
+    if (empty($nombre)) return null;
+
+    $nombre = trim($nombre);
+
+    // Buscar categoría existente
+    $categorias = wcRequest('/products/categories?search=' . urlencode($nombre) . '&per_page=100');
+
+    foreach ($categorias as $cat) {
+        // Coincidencia exacta (case-insensitive) y mismo padre
+        if (strcasecmp($cat['name'], $nombre) === 0 && $cat['parent'] == $parentId) {
+            return $cat['id'];
+        }
+    }
+
+    // Si no existe, crear
+    $newCat = wcRequest('/products/categories', 'POST', [
+        'name' => $nombre,
+        'parent' => $parentId
+    ]);
+
+    return $newCat['id'] ?? null;
+}
 
 // Solo POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -11,7 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // Leer JSON del body
 $input = json_decode(file_get_contents('php://input'), true);
-$sku = $input['sku'] ?? '';
+$sku = trim($input['sku'] ?? '');
+$inputImages = $input['images'] ?? []; // Imágenes opcionales
+$inputDescripcionML = $input['descripcion_ml'] ?? null; // Descripción de ML opcional
 
 if (empty($sku)) {
     http_response_code(400);
@@ -20,9 +59,20 @@ if (empty($sku)) {
 }
 
 try {
+    // Usar servicios si están disponibles
+    if (class_exists('\App\Container') && \App\Container::isBooted()) {
+        $syncService = \App\Container::get(\App\Sige\SyncService::class);
+        $result = $syncService->publishProduct($sku);
+        echo json_encode($result);
+        exit();
+    }
+
+    // Fallback al código original
     $db = getDbConnection();
 
-    // Buscar producto en la BD (consulta SIGE con JOINs - incluye dimensiones y atributos)
+    // Usar sige_pal_preartlis para precios y sige_ads_artdepsck para stock por depósito
+    $listaPrecio = SIGE_LISTA_PRECIO;
+    $deposito = SIGE_DEPOSITO;
     $sql = "SELECT
                 a.ART_IDArticulo as sku,
                 a.ART_DesArticulo as nombre,
@@ -30,27 +80,31 @@ try {
                 a.art_artobs as descripcion_larga,
                 p.PAL_PrecVtaArt AS precio_sin_iva,
                 (p.PAL_PrecVtaArt * (1 + (a.ART_PorcIVARI / 100))) AS precio_final,
-                (s.ADS_CanFisicoArt - s.ADS_CanReservArt) AS stock,
+                COALESCE(s.ADS_CanFisicoArt - s.ADS_CanReservArt, 0) AS stock,
                 d.ADV_Peso as peso,
                 d.ADV_Alto as alto,
                 d.ADV_Ancho as ancho,
                 d.ADV_Profundidad as profundidad,
                 attr.atr_descatr as attr_nombre,
-                attr.aat_descripcion as attr_valor
+                attr.aat_descripcion as attr_valor,
+                lin.LIN_DesLinea as categoria,
+                gli.gli_descripcion as supracategoria,
+                car.CAR_DesCatArt as marca
             FROM sige_art_articulo a
-            INNER JOIN sige_pal_preartlis p ON a.ART_IDArticulo = p.ART_IDArticulo
-            INNER JOIN sige_ads_artdepsck s ON a.ART_IDArticulo = s.ART_IDArticulo
+            LEFT JOIN sige_pal_preartlis p ON a.ART_IDArticulo = p.ART_IDArticulo
+                AND p.LIS_IDListaPrecio = $listaPrecio
+            LEFT JOIN sige_ads_artdepsck s ON a.ART_IDArticulo = s.ART_IDArticulo
+                AND s.DEP_IDDeposito = $deposito
             LEFT JOIN sige_adv_artdatvar d ON a.ART_IDArticulo = d.art_idarticulo
             LEFT JOIN sige_aat_artatrib attr ON a.ART_IDArticulo = attr.art_idarticulo
-            WHERE a.ART_IDArticulo = ?
-            AND p.LIS_IDListaPrecio = ?
-            AND s.DEP_IDDeposito = ?
+            LEFT JOIN sige_lin_linea lin ON a.LIN_IDLinea = lin.LIN_IDLinea
+            LEFT JOIN sige_gli_gruplin gli ON lin.GLI_IdGli = gli.gli_idgli
+            LEFT JOIN sige_car_catarticulo car ON a.CAR_IdCar = car.CAR_IdCar
+            WHERE TRIM(a.ART_IDArticulo) = ?
             ORDER BY attr.aat_orden";
 
     $stmt = $db->prepare($sql);
-    $listaPrecios = SIGE_LISTA_PRECIO;
-    $deposito = SIGE_DEPOSITO;
-    $stmt->bind_param("sii", $sku, $listaPrecios, $deposito);
+    $stmt->bind_param("s", $sku);
     $stmt->execute();
     $result = $stmt->get_result();
 
@@ -61,17 +115,15 @@ try {
         exit();
     }
 
-    // Procesar resultados (múltiples filas si hay varios atributos)
     $producto = null;
     $atributos = [];
 
     while ($row = $result->fetch_assoc()) {
         if ($producto === null) {
-            // Primera fila: guardar datos del producto
             $producto = [
-                'sku' => $row['sku'],
+                'sku' => trim($row['sku']),
                 'nombre' => $row['nombre'],
-                'part_number' => $row['part_number'],
+                'part_number' => trim($row['part_number'] ?? ''),
                 'descripcion_larga' => $row['descripcion_larga'],
                 'precio_sin_iva' => $row['precio_sin_iva'],
                 'precio_final' => $row['precio_final'],
@@ -79,11 +131,13 @@ try {
                 'peso' => $row['peso'],
                 'alto' => $row['alto'],
                 'ancho' => $row['ancho'],
-                'profundidad' => $row['profundidad']
+                'profundidad' => $row['profundidad'],
+                'categoria' => $row['categoria'],
+                'supracategoria' => $row['supracategoria'],
+                'marca' => $row['marca']
             ];
         }
 
-        // Agregar atributo si existe
         if (!empty($row['attr_nombre']) && !empty($row['attr_valor'])) {
             $atributos[] = [
                 'nombre' => $row['attr_nombre'],
@@ -94,25 +148,95 @@ try {
 
     $db->close();
 
-    // Validar que tiene datos mínimos
+    // Buscar datos faltantes en Mercado Libre
+    $faltaDescripcion = empty($producto['descripcion_larga']);
+    $faltaDimensiones = empty($producto['peso']) && empty($producto['alto']) && empty($producto['ancho']);
+
+    if ($faltaDescripcion || $faltaDimensiones) {
+        $datosML = buscarDatosProductoML(
+            $producto['sku'],
+            $producto['part_number'],
+            $producto['nombre']
+        );
+
+        if (!empty($datosML['encontrado'])) {
+            // Completar descripción si falta
+            if ($faltaDescripcion && !empty($datosML['descripcion'])) {
+                $producto['descripcion_larga'] = $datosML['descripcion'];
+            }
+
+            // Completar dimensiones si faltan
+            if (empty($producto['peso']) && !empty($datosML['peso'])) {
+                $producto['peso'] = $datosML['peso'];
+            }
+            if (empty($producto['alto']) && !empty($datosML['alto'])) {
+                $producto['alto'] = $datosML['alto'];
+            }
+            if (empty($producto['ancho']) && !empty($datosML['ancho'])) {
+                $producto['ancho'] = $datosML['ancho'];
+            }
+            if (empty($producto['profundidad']) && !empty($datosML['profundidad'])) {
+                $producto['profundidad'] = $datosML['profundidad'];
+            }
+
+            // Agregar atributos de ML si no tiene
+            if (empty($atributos) && !empty($datosML['atributos'])) {
+                $atributos = array_slice($datosML['atributos'], 0, 10); // Máximo 10 atributos
+            }
+        }
+    }
+
+    // Validaciones
     if (empty($producto['nombre'])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'El producto no tiene nombre']);
         exit();
     }
 
-    if (empty($producto['precio_final']) || $producto['precio_final'] <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'El producto no tiene precio válido']);
-        exit();
+    // ========================================
+    // CATEGORÍAS AUTOMÁTICAS DESDE SIGE
+    // ========================================
+    $categoryIds = [];
+
+    // Buscar o crear supracategoría
+    $supracategoriaId = null;
+    if (!empty($producto['supracategoria'])) {
+        $supracategoriaId = buscarOCrearCategoria($producto['supracategoria'], 0);
     }
 
-    // Precio final con IVA incluido (como viene de SIGE)
-    $precioFinal = number_format((float) $producto['precio_final'], 2, '.', '');
+    // Buscar o crear categoría (como hija de supracategoría)
+    if (!empty($producto['categoria'])) {
+        $parentId = $supracategoriaId ?? 0;
+        $categoriaId = buscarOCrearCategoria($producto['categoria'], $parentId);
+        if ($categoriaId) {
+            $categoryIds[] = ['id' => $categoriaId];
+        }
+    } elseif ($supracategoriaId) {
+        // Si no hay categoría pero sí supracategoría, usar la supra
+        $categoryIds[] = ['id' => $supracategoriaId];
+    }
 
-    // Preparar datos para WooCommerce
-    $nombre = trim($producto['nombre']);  // ART_DesArticulo
-    $descripcionLarga = trim($producto['descripcion_larga'] ?? '');  // art_artobs
+    // ========================================
+    // MARCA COMO ATRIBUTO
+    // ========================================
+    if (!empty($producto['marca'])) {
+        $atributos[] = [
+            'nombre' => 'Marca',
+            'valor' => $producto['marca']
+        ];
+    }
+
+    // Enviar precio CON IVA - WooCommerce no calcula nada
+    $precioFinal = number_format((float) ($producto['precio_final'] ?? 0), 2, '.', '');
+    $precioSinIva = number_format((float) ($producto['precio_sin_iva'] ?? 0), 2, '.', '');
+
+    $nombre = trim($producto['nombre']);
+    $descripcionLarga = trim($producto['descripcion_larga'] ?? '');
+
+    // Si no hay descripción en SIGE, usar la de ML si viene
+    if (empty($descripcionLarga) && !empty($inputDescripcionML)) {
+        $descripcionLarga = trim($inputDescripcionML);
+    }
 
     $productData = [
         'sku' => $producto['sku'],
@@ -123,15 +247,29 @@ try {
         'stock_quantity' => (int) ($producto['stock'] ?? 0),
         'manage_stock' => true,
         'status' => 'publish',
-        'type' => 'simple'
+        'type' => 'simple',
+        'meta_data' => [
+            [
+                'key' => '_precio_sin_iva',
+                'value' => $precioSinIva
+            ]
+        ]
     ];
 
-    // Agregar peso si existe
+    // Agregar categorías si existen
+    if (!empty($categoryIds)) {
+        $productData['categories'] = $categoryIds;
+    }
+
+    // Agregar imágenes si vienen en el input
+    if (!empty($inputImages)) {
+        $productData['images'] = $inputImages;
+    }
+
     if (!empty($producto['peso']) && $producto['peso'] > 0) {
         $productData['weight'] = strval($producto['peso']);
     }
 
-    // Agregar dimensiones si existen
     $dimensions = [];
     if (!empty($producto['alto']) && $producto['alto'] > 0) {
         $dimensions['height'] = strval($producto['alto']);
@@ -146,7 +284,6 @@ try {
         $productData['dimensions'] = $dimensions;
     }
 
-    // Agregar atributos si existen
     if (!empty($atributos)) {
         $wcAttributes = [];
         foreach ($atributos as $attr) {
@@ -160,13 +297,14 @@ try {
         $productData['attributes'] = $wcAttributes;
     }
 
-    // Verificar si el producto ya existe en WooCommerce
-    $wcProducts = wcRequest('/products?sku=' . urlencode($producto['sku']));
+    // Buscar producto existente con el SKU (en cualquier estado)
+    $wcProducts = wcRequest('/products?sku=' . urlencode($producto['sku']) . '&status=any');
     $existingProduct = null;
 
     if (!empty($wcProducts)) {
         foreach ($wcProducts as $p) {
-            if ($p['sku'] === $producto['sku']) {
+            // Comparación exacta de SKU sin distinción de tipos
+            if (strcasecmp(trim($p['sku']), trim($producto['sku'])) === 0) {
                 $existingProduct = $p;
                 break;
             }
@@ -174,11 +312,11 @@ try {
     }
 
     if ($existingProduct) {
-        // Actualizar producto existente
+        // Producto ya existe - actualizar
         $response = wcRequest('/products/' . $existingProduct['id'], 'PUT', $productData);
-        $mensaje = 'Producto actualizado en WooCommerce';
+        $mensaje = "Producto actualizado en WooCommerce (ya existía con status: {$existingProduct['status']})";
     } else {
-        // Crear nuevo producto
+        // Producto nuevo - crear
         $response = wcRequest('/products', 'POST', $productData);
         $mensaje = 'Producto creado en WooCommerce';
     }
@@ -195,6 +333,7 @@ try {
             'stock_quantity' => $response['stock_quantity'],
             'weight' => $response['weight'] ?? null,
             'dimensions' => $response['dimensions'] ?? null,
+            'categories' => $response['categories'] ?? [],
             'attributes' => $response['attributes'] ?? [],
             'permalink' => $response['permalink']
         ]

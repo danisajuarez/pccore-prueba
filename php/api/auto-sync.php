@@ -1,17 +1,15 @@
 <?php
-// ============================================================================
-// AUTO-SYNC: Híbrido - Busca individual, actualiza en batch
-// v2024.02.11 - 12:20
-// ============================================================================
-// Procesa 50 productos por request:
-// - Busca cada SKU en WooCommerce (individual)
-// - Actualiza TODOS juntos en un batch (1 sola llamada)
-// Esto reduce las llamadas a la mitad vs el método anterior
-// ============================================================================
+/**
+ * AUTO-SYNC: Híbrido - Busca individual, actualiza en batch
+ *
+ * Procesa productos con cambios de precio/stock:
+ * - Busca cada SKU en WooCommerce (individual)
+ * - Actualiza TODOS juntos en un batch
+ */
 
 error_reporting(0);
 ini_set('display_errors', 0);
-set_time_limit(180); // 3 minutos max
+set_time_limit(180);
 
 header('Content-Type: application/json');
 
@@ -19,7 +17,7 @@ require_once __DIR__ . '/../config.php';
 
 define('BATCH_SIZE', 50);
 
-// Autenticacion
+// Autenticación
 $keyFromUrl = $_GET['key'] ?? '';
 if ($keyFromUrl !== API_KEY) {
     http_response_code(401);
@@ -28,6 +26,15 @@ if ($keyFromUrl !== API_KEY) {
 }
 
 try {
+    // Usar servicios si están disponibles
+    if (class_exists('\App\Container') && \App\Container::isBooted()) {
+        $syncService = \App\Container::get(\App\Sige\SyncService::class);
+        $result = $syncService->syncBatch(BATCH_SIZE);
+        echo json_encode($result);
+        exit;
+    }
+
+    // Fallback al código original
     $db = getDbConnection();
 
     // Contar pendientes
@@ -76,10 +83,21 @@ try {
 
         try {
             $wcProducts = wcRequest('/products?sku=' . urlencode($sku));
+            $wcProduct = null;
 
-            if (!empty($wcProducts) && isset($wcProducts[0]['id'])) {
+            // Buscar producto con SKU exacto
+            if (!empty($wcProducts)) {
+                foreach ($wcProducts as $p) {
+                    if (strcasecmp(trim($p['sku']), trim($sku)) === 0) {
+                        $wcProduct = $p;
+                        break;
+                    }
+                }
+            }
+
+            if ($wcProduct !== null) {
                 $batchUpdate[] = [
-                    'id' => $wcProducts[0]['id'],
+                    'id' => $wcProduct['id'],
                     'sku' => $sku,
                     'regular_price' => number_format((float)$prod['precio'], 2, '.', ''),
                     'sale_price' => '',
@@ -94,7 +112,6 @@ try {
                 $notInWoo[] = $sku;
             }
         } catch (Exception $e) {
-            // Si falla la búsqueda, lo contamos como no encontrado
             $notInWoo[] = $sku;
         }
     }
@@ -105,7 +122,6 @@ try {
     $results = [];
 
     if (!empty($batchUpdate)) {
-        // Limpiar SKU del payload (WooCommerce no lo necesita en update)
         $wcPayload = array_map(function($item) {
             $clean = $item;
             unset($clean['sku']);
@@ -115,7 +131,6 @@ try {
         try {
             wcRequest('/products/batch', 'POST', ['update' => $wcPayload]);
 
-            // Todo OK - marcar en BD
             foreach ($batchUpdate as $item) {
                 $sku = $item['sku'];
                 $data = $skuToData[$sku];
@@ -132,7 +147,6 @@ try {
                 $results[] = ['sku' => $sku, 'status' => 'updated', 'price' => $item['regular_price'], 'stock' => $item['stock_quantity']];
             }
         } catch (Exception $e) {
-            // Batch falló - reportar error
             foreach ($batchUpdate as $item) {
                 $failed++;
                 $results[] = ['sku' => $item['sku'], 'status' => 'error', 'error' => $e->getMessage()];

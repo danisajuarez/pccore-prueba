@@ -40,8 +40,8 @@ if (isset($input['sku']) && trim($input['sku']) === '') {
 
 // Precio (si viene)
 if (isset($input['regular_price'])) {
-    if (!is_numeric($input['regular_price']) || floatval($input['regular_price']) <= 0) {
-        $errores[] = "El campo 'regular_price' debe ser numérico y mayor a 0";
+    if (!is_numeric($input['regular_price']) || floatval($input['regular_price']) < 0) {
+        $errores[] = "El campo 'regular_price' debe ser numérico y >= 0";
     }
 }
 
@@ -100,6 +100,17 @@ if (isset($input['description'])) {
 
 if (isset($input['regular_price'])) {
     $productData['regular_price'] = strval($input['regular_price']);
+}
+
+// Precio sin IVA (meta field)
+if (isset($input['precio_sin_iva'])) {
+    if (!isset($productData['meta_data'])) {
+        $productData['meta_data'] = [];
+    }
+    $productData['meta_data'][] = [
+        'key' => '_precio_sin_iva',
+        'value' => strval($input['precio_sin_iva'])
+    ];
 }
 
 if (isset($input['stock_quantity'])) {

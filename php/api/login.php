@@ -1,5 +1,25 @@
 <?php
-require_once __DIR__ . '/../config.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Cargar configuración básica
+$autoloadPath = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($autoloadPath)) {
+    require_once $autoloadPath;
+    require_once __DIR__ . '/../bootstrap.php';
+    $appConfig = \App\Container::get(\App\Config\AppConfig::class);
+    $CLIENTE_ID = $appConfig->getClienteId();
+} else {
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    if (preg_match('/^([a-zA-Z0-9-]+)\.antartidasige\.com$/', $host, $matches)) {
+        $CLIENTE_ID = strtolower($matches[1]);
+    } elseif (isset($_GET['cliente'])) {
+        $CLIENTE_ID = strtolower($_GET['cliente']);
+    } else {
+        $CLIENTE_ID = 'pccoreprueba';
+    }
+}
 
 $error = '';
 
@@ -8,23 +28,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $_POST['user'] ?? '';
     $pass = $_POST['pass'] ?? '';
 
-    $usuario = validateLogin($user, $pass);
-    if ($usuario) {
-        $_SESSION['logged_in'] = true;
-        $_SESSION['cliente_id'] = $CLIENTE_ID;
-        $_SESSION['user'] = $user;
-        $_SESSION['user_id'] = $usuario['USU_IDUsuario'];
-        $_SESSION['user_nombre'] = $usuario['USU_DatosUsu'] ?? $user;
-        header('Location: /');
-        exit();
+    // Intentar login usando AuthService si está disponible
+    if (class_exists('\\App\\Container') && \App\Container::isBooted()) {
+        try {
+            $authService = \App\Container::get(\App\Auth\AuthService::class);
+
+            if ($authService->login($user, $pass)) {
+                header('Location: /api/admin-productos.php');
+                exit();
+            } else {
+                $error = 'Usuario o contraseña incorrectos';
+            }
+        } catch (Exception $e) {
+            $error = 'Error en el sistema de autenticación';
+        }
     } else {
-        $error = 'Usuario o contraseña incorrectos';
+        // Fallback: validar directamente contra la base de datos
+        try {
+            require_once __DIR__ . '/../config.php';
+            $db = getDbConnection();
+
+            $sql = "SELECT USU_IDUsuario, USU_LogUsu, USU_DatosUsu, USU_Habilitado
+                    FROM sige_usu_usuario
+                    WHERE USU_LogUsu = ? AND USU_PassWord = ?";
+
+            $stmt = $db->prepare($sql);
+            $stmt->bind_param('ss', $user, $pass);
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            if ($result->num_rows > 0) {
+                $userData = $result->fetch_assoc();
+
+                // Verificar si está habilitado
+                if ($userData['USU_Habilitado'] !== 'S') {
+                    $error = 'Usuario deshabilitado. Contactá al administrador.';
+                } else {
+                    // Login exitoso
+                    $_SESSION['logged_in'] = true;
+                    $_SESSION['cliente_id'] = $CLIENTE_ID;
+                    $_SESSION['user'] = $userData['USU_LogUsu'];
+                    $_SESSION['user_id'] = $userData['USU_IDUsuario'];
+                    $_SESSION['user_nombre'] = $userData['USU_DatosUsu'];
+
+                    header('Location: /api/admin-productos.php');
+                    exit();
+                }
+            } else {
+                $error = 'Usuario o contraseña incorrectos';
+            }
+
+            $stmt->close();
+            $db->close();
+
+        } catch (Exception $e) {
+            $error = 'Error conectando a la base de datos';
+        }
     }
 }
 
-// Si ya está logueado, redirigir
+// Si ya está logueado, redirigir a productos
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && $_SESSION['cliente_id'] === $CLIENTE_ID) {
-    header('Location: /');
+    header('Location: /api/admin-productos.php');
     exit();
 }
 
@@ -159,8 +224,8 @@ header('Content-Type: text/html; charset=utf-8');
 <body>
     <div class="login-container">
         <div class="logo">
-            <h1>Administrador</h1>
-            <span>Sistema de Productos</span>
+            <h1>Admin Productos</h1>
+            <span>Ingresá para continuar</span>
         </div>
 
         <?php if ($error): ?>

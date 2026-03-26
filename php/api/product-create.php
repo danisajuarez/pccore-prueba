@@ -1,4 +1,11 @@
 <?php
+/**
+ * API: Crear producto nuevo en WooCommerce
+ * Soporta dos formatos de input:
+ * 1. Formato original: name, regular_price, stock_quantity
+ * 2. Formato nuevo (desde ML): nombre, precio, stock, imagenes[]
+ */
+
 require_once __DIR__ . '/../config.php';
 checkAuth();
 
@@ -18,6 +25,20 @@ if (!$input) {
     exit();
 }
 
+// Normalizar campos (soportar ambos formatos)
+if (isset($input['nombre']) && !isset($input['name'])) {
+    $input['name'] = $input['nombre'];
+}
+if (isset($input['precio']) && !isset($input['regular_price'])) {
+    $input['regular_price'] = $input['precio'];
+}
+if (isset($input['stock']) && !isset($input['stock_quantity'])) {
+    $input['stock_quantity'] = $input['stock'];
+}
+if (isset($input['descripcion']) && !isset($input['description'])) {
+    $input['description'] = $input['descripcion'];
+}
+
 // Validaciones
 $errores = [];
 
@@ -31,21 +52,18 @@ if (empty($input['name'])) {
     $errores[] = "El campo 'name' es requerido";
 }
 
-// Descripción corta (opcional, usa nombre si no viene)
-// Descripción larga (opcional, usa nombre si no viene)
-
 // Precio
 if (!isset($input['regular_price'])) {
-    $errores[] = "El campo 'regular_price' es requerido";
+    $errores[] = "El campo 'precio' es requerido";
 } elseif (!is_numeric($input['regular_price']) || floatval($input['regular_price']) <= 0) {
-    $errores[] = "El campo 'regular_price' debe ser numérico y mayor a 0";
+    $errores[] = "El campo 'precio' debe ser numérico y mayor a 0";
 }
 
-// Stock
+// Stock (opcional, default 0)
 if (!isset($input['stock_quantity'])) {
-    $errores[] = "El campo 'stock_quantity' es requerido";
+    $input['stock_quantity'] = 0;
 } elseif (!is_numeric($input['stock_quantity']) || intval($input['stock_quantity']) < 0) {
-    $errores[] = "El campo 'stock_quantity' debe ser un entero >= 0";
+    $errores[] = "El campo 'stock' debe ser un entero >= 0";
 }
 
 // Atributos (opcional pero si viene debe ser array válido)
@@ -73,7 +91,7 @@ $nombre = trim($input['name']);
 $productData = [
     'sku' => trim($input['sku']),
     'name' => $nombre,
-    'short_description' => !empty($input['short_description']) ? $input['short_description'] : $nombre,
+    'short_description' => !empty($input['short_description']) ? $input['short_description'] : '',
     'description' => !empty($input['description']) ? $input['description'] : $nombre,
     'regular_price' => strval($input['regular_price']),
     'stock_quantity' => intval($input['stock_quantity']),
@@ -81,6 +99,38 @@ $productData = [
     'status' => 'publish',
     'type' => 'simple'
 ];
+
+// Categoría
+if (!empty($input['categoria_id'])) {
+    $productData['categories'] = [
+        ['id' => (int) $input['categoria_id']]
+    ];
+}
+
+// Dimensiones
+if (!empty($input['peso'])) {
+    $productData['weight'] = strval($input['peso']);
+}
+if (!empty($input['alto']) || !empty($input['ancho']) || !empty($input['largo'])) {
+    $productData['dimensions'] = [
+        'length' => strval($input['largo'] ?? ''),
+        'width' => strval($input['ancho'] ?? ''),
+        'height' => strval($input['alto'] ?? '')
+    ];
+}
+
+// Imágenes (URLs de ML u otras fuentes)
+if (!empty($input['imagenes']) && is_array($input['imagenes'])) {
+    $productData['images'] = [];
+    foreach ($input['imagenes'] as $index => $url) {
+        if (is_string($url) && filter_var($url, FILTER_VALIDATE_URL)) {
+            $productData['images'][] = [
+                'src' => $url,
+                'position' => $index
+            ];
+        }
+    }
+}
 
 // Procesar atributos si vienen
 if (!empty($input['atributos'])) {

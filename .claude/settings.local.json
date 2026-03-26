@@ -33,7 +33,11 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nMigrar a proyecto PHP para WooCommerce\n\n- Eliminar proyecto Node.js\n- Adaptar login para usar credenciales de config\n- Adaptar product-search para buscar directo en WooCommerce\n- Agregar configuracion portalgcom\n- Desactivar verificacion SSL para desarrollo\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
       "Bash(git checkout:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(php:*)",
+      "Bash(xargs:*)",
+      "Bash(composer dump-autoload:*)"
     ]
   }
 }

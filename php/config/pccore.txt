@@ -7,11 +7,11 @@ wc_key=ck_28e04bbb3d5000fb9240cac6bb64ad2597aff0df
 wc_secret=cs_b6442994d793997f0f9c829b8cdf3c38b3231c28
 
 ; Base de datos SIGE
-db_host=186.136.6.20
+db_host=remoto.retec.com.ar
 db_port=3307
-db_user=demo
-db_pass=demo
-db_name=pccore
+db_user=danisa
+db_pass=danisa2025
+db_name=retec
 
 ; Configuración SIGE
 lista_precio=2

@@ -22,7 +22,7 @@ $porcIva = 0;
 if (isset($input['regular_price'])) {
     try {
         $db = getDbConnection();
-        $stmtIva = $db->prepare("SELECT ART_PorcIVARI FROM sige_art_articulo WHERE ART_IDArticulo = ?");
+        $stmtIva = $db->prepare("SELECT ART_PorcIVARI FROM sige_art_articulo WHERE TRIM(ART_IDArticulo) = ?");
         $stmtIva->bind_param("s", $sku);
         $stmtIva->execute();
         $resultIva = $stmtIva->get_result();

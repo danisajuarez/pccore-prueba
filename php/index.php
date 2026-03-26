@@ -1,8 +1,31 @@
 <?php
-require_once __DIR__ . '/config.php';
-checkSession();
+// Sincronizador - No requiere login
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-header_remove('Content-Type');
+// Cargar configuración básica sin verificar sesión
+$autoloadPath = __DIR__ . '/vendor/autoload.php';
+if (file_exists($autoloadPath)) {
+    require_once $autoloadPath;
+    require_once __DIR__ . '/bootstrap.php';
+    $appConfig = \App\Container::get(\App\Config\AppConfig::class);
+    $CLIENTE_ID = $appConfig->getClienteId();
+} else {
+    // Fallback
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    if (preg_match('/^([a-zA-Z0-9-]+)\.antartidasige\.com$/', $host, $matches)) {
+        $CLIENTE_ID = strtolower($matches[1]);
+    } elseif (isset($_GET['cliente'])) {
+        $CLIENTE_ID = strtolower($_GET['cliente']);
+    } else {
+        $CLIENTE_ID = 'pccoreprueba';
+    }
+}
+
+// API Key para el sincronizador
+$API_KEY = $CLIENTE_ID . '-sync-2024';
+
 header('Content-Type: text/html; charset=utf-8');
 ?>
 <!DOCTYPE html>
@@ -245,31 +268,15 @@ header('Content-Type: text/html; charset=utf-8');
             <div class="logo"><?= htmlspecialchars(strtoupper($CLIENTE_ID)) ?> <span style="font-size: 10px; color: #64748b; font-weight: normal;">Sync Panel</span></div>
             <div style="display: flex; align-items: center; gap: 16px;">
                 <div class="nav-links">
-                    <a href="/" class="active">Sincronizador</a>
-                    <a href="/api/admin-productos.php">Productos</a>
-                    <a href="/api/logout.php" style="background: #dc2626; border-color: #dc2626;">Salir</a>
+                    <a href="/" class="active">Editar</a>
+                    <a href="/api/login.php" target="_blank">Productos</a>
                 </div>
                 <div class="status" id="statusIndicator">
                     <div class="status-dot" id="statusDot"></div>
-                    <span id="statusText"><?= htmlspecialchars($_SESSION['user_nombre'] ?? $_SESSION['user']) ?></span>
+                    <span id="statusText">Sistema</span>
                 </div>
             </div>
         </header>
-
-        <div class="cards">
-            <div class="card">
-                <h2>📦 Estado API</h2>
-                <div class="card-value" id="apiStatus">--</div>
-            </div>
-            <div class="card">
-                <h2>⏱️ Próxima Sync</h2>
-                <div class="card-value" id="nextSync">10:00</div>
-            </div>
-            <div class="card">
-                <h2>🔄 Última Sync</h2>
-                <div class="card-value" id="lastSync">--</div>
-            </div>
-        </div>
 
         <div class="main-grid">
             <div class="search-section">
@@ -293,7 +300,7 @@ header('Content-Type: text/html; charset=utf-8');
     </div>
 
     <script>
-        const API_KEY = '<?= API_KEY ?>';
+        const API_KEY = '<?= $API_KEY ?>';
         const SYNC_INTERVAL = 10 * 60 * 1000; // 10 minutos en ms
                 let countdown = 600; // 10 minutos en segundos
         let countdownInterval;
@@ -322,10 +329,7 @@ header('Content-Type: text/html; charset=utf-8');
         }
 
         function updateCountdownDisplay() {
-            const mins = Math.floor(countdown / 60);
-            const secs = countdown % 60;
-            document.getElementById('nextSync').textContent =
-                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            // Cards eliminadas - no hacer nada
         }
 
         // Auto sync desde base de datos - procesa lotes hasta terminar
@@ -418,7 +422,6 @@ header('Content-Type: text/html; charset=utf-8');
             syncRunning = false;
             btn.disabled = false;
             btn.textContent = 'Sincronizar Ahora';
-            document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
             countdown = 600;
 
             if (totalSynced > 0 || totalNotInWoo > 0) {
@@ -439,13 +442,11 @@ header('Content-Type: text/html; charset=utf-8');
                 if (data.status === 'ok') {
                     document.getElementById('statusDot').classList.remove('error');
                     document.getElementById('statusText').textContent = 'Conectado';
-                    document.getElementById('apiStatus').textContent = 'Online';
                     addLog('API conectada correctamente', 'success');
                 }
             } catch (e) {
                 document.getElementById('statusDot').classList.add('error');
                 document.getElementById('statusText').textContent = 'Error';
-                document.getElementById('apiStatus').textContent = 'Offline';
                 addLog('Error conectando a la API: ' + e.message, 'error');
             }
         }
