@@ -48,6 +48,7 @@ try {
             TRIM(a.ART_IDArticulo) as sku,
             a.ART_DesArticulo as nombre,
             TRIM(a.ART_PartNumber) as part_number,
+            TRIM(a.ART_CodBarraArt) as codigo_barras,
             a.ART_IdML as id_ml,
             d.adv_pathimagen as imagen_sige
         FROM sige_art_articulo a
@@ -74,6 +75,7 @@ try {
             'sku' => $articulo['sku'],
             'nombre' => $articulo['nombre'],
             'part_number' => $articulo['part_number'],
+            'codigo_barras' => $articulo['codigo_barras'],
             'id_ml' => $articulo['id_ml']
         ],
         'imagenes' => [
@@ -95,7 +97,8 @@ try {
         $resultadoML = buscarImagenesConFallback(
             $articulo['sku'],
             $articulo['part_number'],
-            $articulo['nombre']
+            $articulo['nombre'],
+            $articulo['codigo_barras']
         );
 
         if (!empty($resultadoML['imagenes'])) {

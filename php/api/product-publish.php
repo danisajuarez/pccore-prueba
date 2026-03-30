@@ -70,6 +70,13 @@ try {
     // Fallback al código original
     $db = getDbConnection();
 
+    // Obtener cotización del dólar
+    $cotizacion = 1;
+    $resCotiz = $db->query("SELECT MON_CotizMon FROM sige_mon_moneda WHERE MON_IdMon = 2");
+    if ($resCotiz && $rowCotiz = $resCotiz->fetch_assoc()) {
+        $cotizacion = (float)$rowCotiz['MON_CotizMon'];
+    }
+
     // Usar sige_pal_preartlis para precios y sige_ads_artdepsck para stock por depósito
     $listaPrecio = SIGE_LISTA_PRECIO;
     $deposito = SIGE_DEPOSITO;
@@ -78,8 +85,8 @@ try {
                 a.ART_DesArticulo as nombre,
                 a.ART_PartNumber as part_number,
                 a.art_artobs as descripcion_larga,
-                p.PAL_PrecVtaArt AS precio_sin_iva,
-                (p.PAL_PrecVtaArt * (1 + (a.ART_PorcIVARI / 100))) AS precio_final,
+                (p.PAL_PrecVtaArt * m.MON_CotizMon) AS precio_sin_iva,
+                (p.PAL_PrecVtaArt * m.MON_CotizMon * (1 + (a.ART_PorcIVARI / 100))) AS precio_final,
                 COALESCE(s.ADS_CanFisicoArt - s.ADS_CanReservArt, 0) AS stock,
                 d.ADV_Peso as peso,
                 d.ADV_Alto as alto,
@@ -100,6 +107,7 @@ try {
             LEFT JOIN sige_lin_linea lin ON a.LIN_IDLinea = lin.LIN_IDLinea
             LEFT JOIN sige_gli_gruplin gli ON lin.GLI_IdGli = gli.gli_idgli
             LEFT JOIN sige_car_catarticulo car ON a.CAR_IdCar = car.CAR_IdCar
+            INNER JOIN sige_mon_moneda m ON m.MON_IdMon = 2
             WHERE TRIM(a.ART_IDArticulo) = ?
             ORDER BY attr.aat_orden";
 
@@ -319,6 +327,24 @@ try {
         // Producto nuevo - crear
         $response = wcRequest('/products', 'POST', $productData);
         $mensaje = 'Producto creado en WooCommerce';
+    }
+
+    // ========================================
+    // MARCAR COMO PUBLICADO EN SIGE (art_articuloweb = 'S')
+    // ========================================
+    if (!empty($response['id'])) {
+        try {
+            $dbUpdate = getDbConnection();
+            $sqlUpdate = "UPDATE sige_art_articulo SET art_articuloweb = 'S' WHERE TRIM(ART_IDArticulo) = ?";
+            $stmtUpdate = $dbUpdate->prepare($sqlUpdate);
+            $stmtUpdate->bind_param("s", $sku);
+            $stmtUpdate->execute();
+            $stmtUpdate->close();
+            $dbUpdate->close();
+        } catch (Exception $e) {
+            // Log error pero no fallar la respuesta - el producto ya se publicó
+            error_log("Error actualizando art_articuloweb para SKU $sku: " . $e->getMessage());
+        }
     }
 
     echo json_encode([

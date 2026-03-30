@@ -17,7 +17,7 @@ function getClienteId() {
     if (isset($_GET['cliente'])) {
         return strtolower($_GET['cliente']);
     }
-    return 'pccoreprueba';
+    return 'pccore';
 }
 
 $CLIENTE_ID = getClienteId();

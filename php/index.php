@@ -19,7 +19,7 @@ if (file_exists($autoloadPath)) {
     } elseif (isset($_GET['cliente'])) {
         $CLIENTE_ID = strtolower($_GET['cliente']);
     } else {
-        $CLIENTE_ID = 'pccoreprueba';
+        $CLIENTE_ID = 'pccore';
     }
 }
 
@@ -268,7 +268,7 @@ header('Content-Type: text/html; charset=utf-8');
             <div class="logo"><?= htmlspecialchars(strtoupper($CLIENTE_ID)) ?> <span style="font-size: 10px; color: #64748b; font-weight: normal;">Sync Panel</span></div>
             <div style="display: flex; align-items: center; gap: 16px;">
                 <div class="nav-links">
-                    <a href="/" class="active">Editar</a>
+                    <a href="/" class="active">Sincronizador</a>
                     <a href="/api/login.php" target="_blank">Productos</a>
                 </div>
                 <div class="status" id="statusIndicator">

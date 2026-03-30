@@ -99,15 +99,17 @@ function mlRequest($endpoint, $params = []) {
 /**
  * Buscar imágenes de producto en el catálogo de Mercado Libre
  * @param string $query - SKU, Part Number o nombre del producto
+ * @param string $nombreOriginal - Nombre original para validar relevancia
+ * @param bool $validarEstricto - Si true, usa score. Si false (GTIN), acepta primer resultado
  * @return array - Array de URLs de imágenes o array vacío si no encuentra
  */
-function buscarImagenesML($query, $nombreOriginal = null) {
+function buscarImagenesML($query, $nombreOriginal = null, $validarEstricto = true) {
     try {
         // Usar endpoint de CATÁLOGO (funciona, no está bloqueado)
         $result = mlRequest('/products/search', [
             'q' => $query,
             'site_id' => ML_SITE,
-            'limit' => 10,
+            'limit' => 15,
             'status' => 'active'
         ]);
 
@@ -115,9 +117,9 @@ function buscarImagenesML($query, $nombreOriginal = null) {
             return [];
         }
 
-        // VALIDACIÓN ESTRICTA: Solo aceptar si el SKU/código aparece EXACTO en el nombre
         $queryLower = mb_strtolower($query, 'UTF-8');
         $mejorCandidato = null;
+        $mejorScore = 0;
 
         foreach ($result['data']['results'] as $producto) {
             // Debe tener imágenes
@@ -125,23 +127,42 @@ function buscarImagenesML($query, $nombreOriginal = null) {
                 continue;
             }
 
-            $nombreLower = mb_strtolower($producto['name'] ?? '', 'UTF-8');
-
-            // REGLA PRINCIPAL: El código debe aparecer textualmente en el nombre
-            if (strpos($nombreLower, $queryLower) === false) {
-                continue; // NO contiene el código exacto → RECHAZAR
+            // Si NO es validación estricta (GTIN/EAN), aceptar primer resultado con imágenes
+            if (!$validarEstricto) {
+                $mejorCandidato = $producto;
+                break;
             }
 
+            $nombreProductoML = $producto['name'] ?? '';
+            $nombreLower = mb_strtolower($nombreProductoML, 'UTF-8');
+
             // Verificar que no sea accesorio
-            if ($nombreOriginal && !esProductoRelevante($producto['name'], $nombreOriginal)) {
+            if ($nombreOriginal && !esProductoRelevante($nombreProductoML, $nombreOriginal)) {
                 continue; // Es un accesorio → RECHAZAR
             }
 
-            $mejorCandidato = $producto;
-            break; // Tomar el primero que pase los filtros
+            // Calcular score de similitud
+            $score = 0;
+
+            // Bonus si el query aparece exacto en el nombre ML
+            if (strpos($nombreLower, $queryLower) !== false) {
+                $score += 50;
+            }
+
+            // Calcular score por similitud con nombre original
+            if ($nombreOriginal) {
+                $score += calcularScore($nombreProductoML, $nombreOriginal);
+            }
+
+            // Actualizar mejor candidato
+            if ($score > $mejorScore) {
+                $mejorScore = $score;
+                $mejorCandidato = $producto;
+            }
         }
 
-        if (!$mejorCandidato) {
+        // Requerir score mínimo de 30 para aceptar (relajado vs 40 anterior)
+        if (!$mejorCandidato || ($validarEstricto && $mejorScore < 30)) {
             return [];
         }
 
@@ -183,37 +204,163 @@ function buscarImagenesML($query, $nombreOriginal = null) {
 }
 
 /**
- * Buscar imágenes con estrategia de fallback:
- * 1. Buscar por Part Number (más específico)
- * 2. Si no encuentra, buscar por SKU (solo si parece un código de producto)
- * Nota: Búsqueda por nombre deshabilitada para evitar falsos positivos
+ * Buscar imágenes con estrategia de fallback mejorada:
+ * 1. GTIN/EAN (código de barras) - más preciso
+ * 2. Part Number
+ * 3. Marca + Modelo (extraído del nombre)
+ * 4. SKU
+ * 5. Nombre limpio (primeras palabras significativas)
  */
-function buscarImagenesConFallback($sku, $partNumber = null, $nombre = null) {
+function buscarImagenesConFallback($sku, $partNumber = null, $nombre = null, $codigoBarras = null) {
     $resultado = null;
 
-    // 1. Intentar por Part Number primero
+    // 1. Intentar por GTIN/EAN (código de barras)
+    // NOTA: Validamos relevancia porque ML puede tener EANs incorrectos
+    if ($codigoBarras && strlen($codigoBarras) >= 8 && is_numeric($codigoBarras)) {
+        $resultado = buscarImagenesML($codigoBarras, $nombre, true);
+        if (!empty($resultado['imagenes'])) {
+            $resultado['encontrado_por'] = 'GTIN/EAN';
+            return $resultado;
+        }
+    }
+
+    // 2. Intentar por Part Number
     if ($partNumber && strlen($partNumber) >= 3) {
-        $resultado = buscarImagenesML($partNumber, $nombre);
+        $resultado = buscarImagenesML($partNumber, $nombre, true);
         if (!empty($resultado['imagenes'])) {
             $resultado['encontrado_por'] = 'Part Number';
+            return $resultado;
         }
     }
 
-    // 2. Intentar por SKU
-    if (empty($resultado['imagenes']) && $sku && (strlen($sku) >= 5 || !is_numeric($sku))) {
-        $resultado = buscarImagenesML($sku, $nombre);
+    // 3. Intentar por Marca + Modelo (extraído del nombre)
+    if ($nombre) {
+        $marcaModelo = extraerMarcaModelo($nombre);
+        if ($marcaModelo) {
+            $resultado = buscarImagenesML($marcaModelo, $nombre, true);
+            if (!empty($resultado['imagenes'])) {
+                $resultado['encontrado_por'] = 'Marca+Modelo';
+                return $resultado;
+            }
+        }
+    }
+
+    // 4. Intentar por SKU
+    if ($sku && (strlen($sku) >= 5 || !is_numeric($sku))) {
+        $resultado = buscarImagenesML($sku, $nombre, true);
         if (!empty($resultado['imagenes'])) {
             $resultado['encontrado_por'] = 'SKU';
+            return $resultado;
         }
     }
 
-    // 3. Búsqueda por nombre deshabilitada - traía demasiados falsos positivos
-
-    if ($resultado && !empty($resultado['imagenes'])) {
-        return $resultado;
+    // 5. Intentar por nombre limpio (primeras palabras significativas)
+    if ($nombre) {
+        $nombreLimpio = extraerPalabrasClaveNombre($nombre);
+        if ($nombreLimpio && strlen($nombreLimpio) >= 8) {
+            $resultado = buscarImagenesML($nombreLimpio, $nombre, true);
+            if (!empty($resultado['imagenes'])) {
+                $resultado['encontrado_por'] = 'Nombre';
+                return $resultado;
+            }
+        }
     }
 
     return ['imagenes' => [], 'encontrado_por' => null];
+}
+
+/**
+ * Extraer Marca + Modelo del nombre del producto
+ * Ej: "Monitor Samsung LS19D300 19 Pulgadas" → "Samsung LS19D300"
+ */
+function extraerMarcaModelo($nombre) {
+    $marcas = [
+        'samsung', 'lg', 'hp', 'dell', 'lenovo', 'asus', 'acer', 'msi',
+        'gigabyte', 'intel', 'amd', 'nvidia', 'logitech', 'razer', 'corsair',
+        'kingston', 'seagate', 'western digital', 'wd', 'sandisk', 'crucial',
+        'epson', 'canon', 'brother', 'xerox', 'lexmark', 'ricoh',
+        'tp-link', 'tplink', 'd-link', 'dlink', 'netgear', 'ubiquiti',
+        'microsoft', 'apple', 'sony', 'philips', 'viewsonic', 'benq', 'aoc',
+        'thermaltake', 'cooler master', 'nzxt', 'evga', 'zotac', 'pny',
+        'hyperx', 'patriot', 'gskill', 'g.skill', 'team', 'adata', 'xpg',
+        'redragon', 'genius', 'trust', 'anker', 'ugreen', 'orico',
+        'asrock', 'biostar', 'ecs', 'foxconn', 'supermicro',
+        'toshiba', 'hitachi', 'maxtor', 'transcend', 'silicon power',
+        'netbook', 'pcbox', 'bangho', 'noblex', 'positivo', 'exo', 'kelyx'
+    ];
+
+    $nombreLower = mb_strtolower($nombre, 'UTF-8');
+    $marcaEncontrada = null;
+
+    // Buscar marca en el nombre
+    foreach ($marcas as $marca) {
+        if (strpos($nombreLower, $marca) !== false) {
+            $marcaEncontrada = $marca;
+            break;
+        }
+    }
+
+    if (!$marcaEncontrada) {
+        return null;
+    }
+
+    // Buscar modelo alfanumérico (ej: LS19D300, GTX1650, RX580, A400, K120)
+    // Patrones: letras+números, números+letras, o combinaciones (mínimo 1 letra + 2 números)
+    preg_match_all('/\b([A-Z]{1,5}[\-]?[0-9]{2,}[A-Z0-9]*|[0-9]{2,}[A-Z]{1,5}[A-Z0-9]*)\b/i', $nombre, $matches);
+
+    if (!empty($matches[1])) {
+        // Tomar el modelo más largo/específico
+        $modelo = '';
+        foreach ($matches[1] as $m) {
+            if (strlen($m) > strlen($modelo)) {
+                $modelo = $m;
+            }
+        }
+        if ($modelo) {
+            return ucfirst($marcaEncontrada) . ' ' . strtoupper($modelo);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Extraer palabras clave significativas del nombre
+ * Elimina palabras genéricas y devuelve las más relevantes
+ */
+function extraerPalabrasClaveNombre($nombre) {
+    // Palabras a ignorar (stopwords + medidas + genéricas)
+    $ignorar = [
+        'de', 'para', 'con', 'sin', 'the', 'and', 'or', 'in', 'on', 'at',
+        'pulgadas', 'pulg', 'inch', 'mm', 'cm', 'mts', 'metros',
+        'gb', 'tb', 'mb', 'mhz', 'ghz', 'watts', 'watt',
+        'negro', 'blanco', 'gris', 'rojo', 'azul', 'verde', 'black', 'white',
+        'nuevo', 'new', 'original', 'oem', 'bulk', 'box', 'retail',
+        'unidad', 'unidades', 'pack', 'kit', 'set',
+        'garantia', 'warranty', 'años', 'year', 'years',
+        'compatible', 'universal', 'generico', 'generica'
+    ];
+
+    // Limpiar nombre
+    $nombre = preg_replace('/[^\w\s\-]/u', ' ', $nombre);
+    $nombre = preg_replace('/\s+/', ' ', trim($nombre));
+
+    $palabras = explode(' ', mb_strtolower($nombre, 'UTF-8'));
+    $palabrasClave = [];
+
+    foreach ($palabras as $palabra) {
+        // Ignorar palabras cortas, números solos, y stopwords
+        if (strlen($palabra) < 3) continue;
+        if (is_numeric($palabra)) continue;
+        if (in_array($palabra, $ignorar)) continue;
+
+        $palabrasClave[] = $palabra;
+
+        // Máximo 4 palabras clave
+        if (count($palabrasClave) >= 4) break;
+    }
+
+    return implode(' ', $palabrasClave);
 }
 
 /**
@@ -238,142 +385,199 @@ function limpiarNombreProducto($nombre) {
  * @param string $nombre
  * @return array - Datos del producto o array vacío
  */
+
 function buscarDatosProductoML($sku, $partNumber = null, $nombre = null) {
-    // Buscar en ML y guardar en SIGE si encuentra
     try {
         $queries = [];
-        // Solo buscar por Part Number y SKU (más precisos)
-        // NO buscar por nombre para evitar falsos positivos
+
         if ($partNumber && strlen($partNumber) >= 3) {
             $queries[] = ['query' => $partNumber, 'tipo' => 'Part Number'];
         }
+
         if ($sku && (strlen($sku) >= 5 || !is_numeric($sku))) {
             $queries[] = ['query' => $sku, 'tipo' => 'SKU'];
         }
-        // Búsqueda por nombre deshabilitada - traía demasiados falsos positivos
-        // if ($nombre) {
-        //     $queries[] = ['query' => limpiarNombreProducto($nombre), 'tipo' => 'Nombre'];
-        // }
 
         foreach ($queries as $q) {
-            $result = mlRequest('/products/search', [
+
+            // =========================
+            // 1. BUSCAR EN ITEMS (BIEN)
+            // =========================
+            $result = mlRequest('/sites/' . ML_SITE . '/search', [
                 'q' => $q['query'],
-                'site_id' => ML_SITE,
-                'limit' => 5,
-                'status' => 'active'
+                'limit' => 5
             ]);
 
-            if ($result['http_code'] !== 200 || empty($result['data']['results'])) {
-                continue;
+            if ($result['http_code'] === 200 && !empty($result['data']['results'])) {
+
+                $mejor = null;
+                $mejorScore = 0;
+
+                foreach ($result['data']['results'] as $item) {
+
+                    if (!esProductoRelevante($item['title'], $nombre)) continue;
+
+                    $score = calcularScore($item['title'], $nombre);
+                    if (stripos($item['title'], $q['query']) !== false) $score += 20;
+
+                    if ($score > $mejorScore) {
+                        $mejorScore = $score;
+                        $mejor = $item;
+                    }
+                }
+
+                if ($mejor && $mejorScore > 40) {
+
+                    $itemId = $mejor['id'];
+                    
+
+                    $datos = [
+                        'encontrado' => true,
+                        'encontrado_por' => $q['tipo'],
+                        'ml_id' => $itemId,
+                        'nombre_ml' => $mejor['title'],
+                        'descripcion' => null,
+                        'peso' => null,
+                        'alto' => null,
+                        'ancho' => null,
+                        'profundidad' => null,
+                        'atributos' => []
+                    ];
+
+                    $itemFull = mlRequest("/items/{$itemId}");
+
+                    if ($itemFull['http_code'] === 200 && !empty($itemFull['data'])) {
+                        $itemData = $itemFull['data'];
+
+                        // Extraer dimensiones del shipping
+                        if (!empty($itemData['shipping']['dimensions'])) {
+                            $dims = $itemData['shipping']['dimensions'];
+                            // Formato: "30x20x10,500" (alto x ancho x largo, peso en gramos)
+                            if (is_string($dims)) {
+                                if (preg_match('/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?),?(\d+)?/', $dims, $m)) {
+                                    $datos['alto'] = floatval($m[1]);
+                                    $datos['ancho'] = floatval($m[2]);
+                                    $datos['profundidad'] = floatval($m[3]);
+                                    if (!empty($m[4])) {
+                                        $datos['peso'] = floatval($m[4]) / 1000; // gramos a kg
+                                    }
+                                }
+                            }
+                        }
+
+                        // Extraer peso del shipping si no lo tenemos
+                        if (empty($datos['peso']) && !empty($itemData['shipping']['free_shipping'])) {
+                            // A veces el peso viene en shipping.weight
+                            if (!empty($itemData['shipping']['weight'])) {
+                                $datos['peso'] = floatval($itemData['shipping']['weight']) / 1000;
+                            }
+                        }
+
+                        // Extraer atributos y buscar dimensiones en ellos
+                        if (!empty($itemData['attributes'])) {
+                            foreach ($itemData['attributes'] as $attr) {
+                                $name = $attr['name'] ?? '';
+                                $value = $attr['value_name'] ?? '';
+                                $attrId = $attr['id'] ?? '';
+
+                                if ($value) {
+                                    $datos['atributos'][] = [
+                                        'nombre' => $name,
+                                        'valor' => $value
+                                    ];
+
+                                    // Extraer dimensiones de atributos si no las tenemos
+                                    $nameLower = mb_strtolower($name, 'UTF-8');
+                                    $attrIdLower = mb_strtolower($attrId, 'UTF-8');
+
+                                    if (empty($datos['peso']) && (strpos($nameLower, 'peso') !== false || $attrIdLower === 'weight')) {
+                                        $datos['peso'] = extraerNumero($value);
+                                    }
+                                    if (empty($datos['alto']) && (strpos($nameLower, 'alto') !== false || strpos($nameLower, 'altura') !== false || $attrIdLower === 'height')) {
+                                        $datos['alto'] = extraerNumero($value);
+                                    }
+                                    if (empty($datos['ancho']) && (strpos($nameLower, 'ancho') !== false || $attrIdLower === 'width')) {
+                                        $datos['ancho'] = extraerNumero($value);
+                                    }
+                                    if (empty($datos['profundidad']) && (strpos($nameLower, 'profundidad') !== false || strpos($nameLower, 'largo') !== false || $attrIdLower === 'depth' || $attrIdLower === 'length')) {
+                                        $datos['profundidad'] = extraerNumero($value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // =========================
+                    // 2. DESCRIPCIÓN (REAL)
+                    // =========================
+                    $descRes = mlRequest("/items/{$itemId}/description");
+
+                    if ($descRes['http_code'] === 200 && !empty($descRes['data'])) {
+                        $datos['descripcion'] =
+                            $descRes['data']['plain_text']
+                            ?? $descRes['data']['text']
+                            ?? '';
+                    }
+
+                   
+
+                    // =========================
+                    // 4. FALLBACK DESCRIPCIÓN
+                    // =========================
+                    if (empty($datos['descripcion']) && !empty($datos['atributos'])) {
+                        $lines = [];
+
+                        foreach (array_slice($datos['atributos'], 0, 8) as $a) {
+                            $lines[] = "• {$a['nombre']}: {$a['valor']}";
+                        }
+
+                        $datos['descripcion'] = "Especificaciones técnicas:\n" . implode("\n", $lines);
+                    }
+
+                    // =========================
+                    // 5. GUARDAR
+                    // =========================
+                    if ($q['tipo'] === 'Part Number' || $mejorScore >= 80) {
+                        guardarDatosMLEnSige($sku, $datos);
+                    }
+
+                    return $datos;
+                }
             }
 
-            // ---------------------------------------------------------
-            // ESTRATEGIA DE MEJOR CANDIDATO (SCORE)
-            // ---------------------------------------------------------
-            $mejorCandidato = null;
-            $mejorScore = 0;
+            // =========================
+            // 6. FALLBACK: PRODUCTS
+            // =========================
+            $prodRes = mlRequest('/products/search', [
+                'q' => $q['query'],
+                'site_id' => ML_SITE,
+                'limit' => 3
+            ]);
 
-            foreach ($result['data']['results'] as $p) {
-                // 1. Filtro duro de relevancia (palabras prohibidas, etc)
-                if (!esProductoRelevante($p['name'], $nombre)) {
-                    continue;
-                }
+            if ($prodRes['http_code'] === 200 && !empty($prodRes['data']['results'])) {
 
-                // 2. Calcular Score de similitud
-                $score = calcularScore($p['name'], $nombre);
+                $producto = $prodRes['data']['results'][0];
 
-                // Bonificación si coincide el ID de producto buscado (Part Number o SKU)
-                if (stripos($p['name'], $q['query']) !== false) {
-                    $score += 20;
-                }
-
-                if ($score > $mejorScore) {
-                    $mejorScore = $score;
-                    $mejorCandidato = $p;
-                }
-            }
-
-            // Solo procedemos si encontramos un candidato decente (Score > 40)
-            if ($mejorCandidato && $mejorScore > 40) {
-                $producto = $mejorCandidato;
-                
                 $datos = [
                     'encontrado' => true,
-                    'encontrado_por' => $q['tipo'],
-                    'ml_id' => $producto['id'], // ID real de ML
+                    'encontrado_por' => 'catalogo',
+                    'ml_id' => $producto['id'],
                     'nombre_ml' => $producto['name'],
-                    'descripcion' => null,
-                    'peso' => null,
-                    'alto' => null,
-                    'ancho' => null,
-                    'profundidad' => null,
-                    'atributos' => []
+                    'descripcion' => $producto['short_description']['content'] ?? '',
+                    'atributos' => $producto['attributes'] ?? []
                 ];
 
-                if (!empty($producto['attributes'])) {
-                    foreach ($producto['attributes'] as $attr) {
-                        $attrId = strtoupper($attr['id'] ?? '');
-                        $attrName = $attr['name'] ?? '';
-                        $attrValue = $attr['value_name'] ?? '';
-
-                        if (!empty($attrValue)) {
-                            $datos['atributos'][] = [
-                                'nombre' => $attrName,
-                                'valor' => $attrValue
-                            ];
-                        }
-
-                        if (strpos($attrId, 'WEIGHT') !== false || strpos($attrId, 'PESO') !== false) {
-                            $datos['peso'] = extraerNumero($attrValue);
-                        }
-                        if (strpos($attrId, 'HEIGHT') !== false || strpos($attrId, 'ALTO') !== false) {
-                            $datos['alto'] = extraerNumero($attrValue);
-                        }
-                        if (strpos($attrId, 'WIDTH') !== false || strpos($attrId, 'ANCHO') !== false) {
-                            $datos['ancho'] = extraerNumero($attrValue);
-                        }
-                        if (strpos($attrId, 'DEPTH') !== false || strpos($attrId, 'LENGTH') !== false ||
-                            strpos($attrId, 'LARGO') !== false || strpos($attrId, 'PROF') !== false) {
-                            $datos['profundidad'] = extraerNumero($attrValue);
-                        }
-                    }
-                }
-
-                try {
-                    $descResult = mlRequest('/products/' . $producto['id']);
-                    if ($descResult['http_code'] === 200 && !empty($descResult['data'])) {
-                        if (!empty($descResult['data']['short_description'])) {
-                            $datos['descripcion'] = $descResult['data']['short_description']['content'] ?? null;
-                        }
-                        if (empty($datos['descripcion']) && !empty($datos['atributos'])) {
-                            $attrTexts = [];
-                            foreach (array_slice($datos['atributos'], 0, 5) as $attr) {
-                                $attrTexts[] = $attr['nombre'] . ': ' . $attr['valor'];
-                            }
-                            $datos['descripcion'] = $producto['name'] . "\n\n" . implode("\n", $attrTexts);
-                        }
-                    }
-                } catch (Exception $e) {
-                    // Ignorar error de descripción
-                }
-
-                // 3. GUARDAR EN SIGE (SOLO SI ES MUY CONFIABLE)
-                // Guardamos si vino por Part Number (muy preciso) o si el score de nombre es muy alto (>80)
-                if ($q['tipo'] === 'Part Number' || $mejorScore >= 80) {
-                    guardarDatosMLEnSige($sku, $datos);
-                }
-                
                 return $datos;
             }
         }
 
         return ['encontrado' => false];
+
     } catch (Exception $e) {
-        error_log("Error buscando datos en ML: " . $e->getMessage());
+        error_log("Error ML: " . $e->getMessage());
         return ['encontrado' => false];
     }
 }
-
 /**
  * Extraer número de un string (ej: "1.5 kg" -> 1.5)
  */
@@ -436,6 +640,37 @@ function esProductoRelevante($nombreEncontrado, $nombreOriginal) {
     $nombreOriginal = mb_strtolower($nombreOriginal, 'UTF-8');
 
     // =================================================================================
+    // FILTRO DE CATEGORÍAS INCOMPATIBLES (NUEVO)
+    // =================================================================================
+    // Si el producto original es de tecnología, rechazar categorías completamente diferentes
+    $categoriasTecnologia = ['impresora', 'multifuncion', 'monitor', 'notebook', 'laptop', 'pc', 'computadora',
+        'teclado', 'mouse', 'memoria', 'disco', 'ssd', 'procesador', 'placa', 'fuente', 'gabinete',
+        'router', 'switch', 'cable', 'cartucho', 'toner', 'tinta'];
+
+    $categoriasNoTecnologia = ['guitarra', 'bajo', 'piano', 'violin', 'musica', 'instrumento',
+        'ropa', 'camisa', 'pantalon', 'zapato', 'zapatilla', 'remera', 'vestido',
+        'mueble', 'silla', 'mesa', 'escritorio', 'cama', 'sofa',
+        'juguete', 'muñeco', 'pelota', 'auto', 'moto', 'bicicleta',
+        'perfume', 'maquillaje', 'crema', 'shampoo',
+        'comida', 'alimento', 'bebida', 'vino', 'cerveza'];
+
+    $esProductoTecnologia = false;
+    foreach ($categoriasTecnologia as $cat) {
+        if (strpos($nombreOriginal, $cat) !== false) {
+            $esProductoTecnologia = true;
+            break;
+        }
+    }
+
+    if ($esProductoTecnologia) {
+        foreach ($categoriasNoTecnologia as $cat) {
+            if (strpos($nombreEncontrado, $cat) !== false) {
+                return false; // RECHAZAR - categoría incompatible
+            }
+        }
+    }
+
+    // =================================================================================
     // FILTRO ANTI-ACCESORIOS v2 (EL MÁS IMPORTANTE)
     // =================================================================================
     // Si se busca un producto principal (monitor, notebook) y el resultado de ML
@@ -461,19 +696,26 @@ function esProductoRelevante($nombreEncontrado, $nombreOriginal) {
         }
     }
 
-    // 0. VALIDACIÓN DE MODELO EXACTO (Blindaje)
-    // Si el original tiene un código tipo "LS19D300" o "21DJ00QLAR" (letras y números mezclados, >4 chars)
-    // El encontrado DEBE tenerlo. Si no, es basura.
-    preg_match_all('/(?:[a-z]+[0-9]+[a-z0-9]*|[0-9]+[a-z]+[a-z0-9]*)/i', $nombreOriginal, $matchesOrig);
-    preg_match_all('/(?:[a-z]+[0-9]+[a-z0-9]*|[0-9]+[a-z]+[a-z0-9]*)/i', $nombreEncontrado, $matchesEnc);
+    // 0. VALIDACIÓN DE MODELO (Flexible)
+    // Si el original tiene un código alfanumérico largo (>=6 chars), verificar coincidencia
+    // Permite variaciones como T530W vs DCPT530DW (comparten "530")
+    preg_match_all('/\b([a-z]{1,3}[0-9]{3,}[a-z0-9]*|[0-9]{3,}[a-z]{1,3}[a-z0-9]*)\b/i', $nombreOriginal, $matchesOrig);
 
     if (!empty($matchesOrig[0])) {
         foreach ($matchesOrig[0] as $modeloOrg) {
-            $modeloOrgLower = mb_strtolower($modeloOrg, 'UTF-8');
-            if (strlen($modeloOrg) >= 5) { // Solo modelos largos y específicos
-                // Si el modelo original NO está en el texto encontrado -> Descartar
-                if (strpos($nombreEncontrado, $modeloOrgLower) === false) {
-                    return false;
+            if (strlen($modeloOrg) >= 6) { // Solo modelos largos y específicos
+                $modeloOrgLower = mb_strtolower($modeloOrg, 'UTF-8');
+
+                // Extraer la parte numérica significativa (ej: T530W -> 530, DCPT530DW -> 530)
+                preg_match('/[0-9]{3,}/', $modeloOrg, $numeros);
+                $parteNumerica = $numeros[0] ?? '';
+
+                // Debe coincidir: modelo exacto O parte numérica de 3+ dígitos
+                $coincideExacto = strpos($nombreEncontrado, $modeloOrgLower) !== false;
+                $coincideNumerico = strlen($parteNumerica) >= 3 && strpos($nombreEncontrado, $parteNumerica) !== false;
+
+                if (!$coincideExacto && !$coincideNumerico) {
+                    return false; // Modelo no coincide
                 }
             }
         }
@@ -542,9 +784,26 @@ function esProductoRelevante($nombreEncontrado, $nombreOriginal) {
             if (strpos($nombreEncontrado, $marca) === false) {
                 return false;
             }
-            // 🚨 FIX: NO retornar true aquí. 
-            // Que tenga la marca no significa que sea el producto correcto (Ej: Samsung Monitor vs Samsung Soporte)
-            // Dejamos que siga corriendo la validación de palabras clave.
+        }
+    }
+
+    // =================================================================================
+    // VALIDACIÓN ESTRICTA PARA CONSUMIBLES (cartuchos, toner, tinta)
+    // =================================================================================
+    // Si es un consumible, el número de modelo DEBE coincidir exactamente
+    // Ej: "HP 57 XL" no puede traer "HP 662 XL"
+    $esConsumible = preg_match('/\b(cartucho|toner|tinta|botella)\b/i', $nombreOriginal);
+    if ($esConsumible) {
+        // Extraer números de modelo del original (ej: 57, 662, T133, 60XL)
+        preg_match_all('/\b([0-9]{2,4}(?:XL)?|T[0-9]{2,3})\b/i', $nombreOriginal, $modelosOrig);
+        if (!empty($modelosOrig[0])) {
+            foreach ($modelosOrig[0] as $modelo) {
+                $modeloLower = mb_strtolower($modelo, 'UTF-8');
+                // El modelo DEBE aparecer en el producto encontrado
+                if (strpos($nombreEncontrado, $modeloLower) === false) {
+                    return false; // Modelo no coincide
+                }
+            }
         }
     }
 

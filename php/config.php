@@ -13,7 +13,7 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
+define('API_KEY', '123456');
 // Cargar autoloader si existe (después de composer install)
 $autoloadPath = __DIR__ . '/vendor/autoload.php';
 if (file_exists($autoloadPath)) {

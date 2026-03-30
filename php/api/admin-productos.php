@@ -752,10 +752,10 @@ header('Content-Type: text/html; charset=utf-8');
             <div class="logo"><?= htmlspecialchars(strtoupper($CLIENTE_ID)) ?> <span style="font-size: 10px; color: #64748b; font-weight: normal;">Admin Productos</span></div>
             <div style="display: flex; align-items: center; gap: 16px;">
                 <div class="nav-links">
-                    <a href="/">Editar</a>
+                    <a href="/">Sincronizador</a>
                     <a href="/api/admin-productos.php" class="active">Productos</a>
                     <a href="/api/logout.php" class="logout">Salir</a>
-                </div>
+                </div> 
                 <div class="status" id="statusIndicator">
                     <div class="status-dot" id="statusDot"></div>
                     <span id="userNameText"><?= htmlspecialchars($_SESSION['user_nombre'] ?? $_SESSION['user']) ?></span>
@@ -768,8 +768,8 @@ header('Content-Type: text/html; charset=utf-8');
             <div class="search-section">
                 <h2>🔍 Buscar Producto por SKU</h2>
                 <div class="search-box">
-                    <input type="text" id="skuInput" placeholder="Ingresá el SKU del producto..." onkeypress="if(event.key==='Enter')buscarProducto()">
-                    <button onclick="buscarProducto()" id="searchBtn">Buscar</button>
+                    <input type="text" id="skuInput" placeholder="Ingresá el SKU del producto..." onkeypress="if(event.key==='Enter')debouncedBuscarProducto()">
+                    <button onclick="debouncedBuscarProducto()" id="searchBtn">Buscar</button>
                 </div>
                 <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #334155; font-size: 11px; color: #64748b;">
                     <div style="margin-bottom: 6px;">💡 Ingresá el código SKU del producto para:</div>
@@ -817,53 +817,68 @@ header('Content-Type: text/html; charset=utf-8');
 
                     <!-- Sección para PRODUCTO NUEVO - Publicar directo -->
                     <div class="update-section" id="publishSection" style="display: none;">
-                        <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: #f8fafc;">📋 Se publicará con estos datos:</div>
+                        <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: #f8fafc;">📋 Datos del producto:</div>
 
-                        <!-- Tabla de datos -->
-                        <table style="width: 100%; background: #0f172a; border-radius: 6px; font-size: 12px; border-collapse: collapse; margin-bottom: 10px;">
+                        <!-- Tabla de datos (mismo orden que updateSection) -->
+                        <table style="width: 100%; background: #0f172a; border-radius: 6px; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
                             <tr>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b; width: 130px;">SKU</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-weight: 600;" id="pubSku">-</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b; width: 130px;">Stock</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-weight: 600;" id="pubStock">-</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b; width: 100px;">SKU</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-weight: 600;" colspan="3" id="pubSku">-</td>
                             </tr>
                             <tr>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Stock</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-weight: 600; color: #3b82f6;" id="pubStock">-</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Precio c/IVA</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; font-weight: 600; color: #22c55e; font-size: 14px;" id="pubPrecio">-</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Precio s/IVA</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #94a3b8;" id="pubPrecioSinIva">-</td>
                             </tr>
                             <tr>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Precio s/IVA</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #94a3b8;" id="pubPrecioSinIva">-</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Categoría</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155;" colspan="3" id="pubCategoria">-</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155;" id="pubCategoria">-</td>
                             </tr>
                             <tr>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Marca</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155;" colspan="3" id="pubMarca">-</td>
-                            </tr>
-                            <tr>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155;" id="pubMarca">-</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Peso</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155;" id="pubPeso">-</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Dimensiones</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155;" id="pubDimensiones">-</td>
                             </tr>
                             <tr>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Desc. corta</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-size: 11px;" colspan="3" id="pubDescCorta">-</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Dimensiones</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155;" colspan="3" id="pubDimensiones">-</td>
                             </tr>
                             <tr>
                                 <td style="padding: 8px; color: #64748b; vertical-align: top;">Desc. larga</td>
-                                <td style="padding: 8px; font-size: 11px; white-space: pre-wrap; word-break: break-word;" colspan="3" id="pubDescLarga">-</td>
+                                <td style="padding: 8px; font-size: 11px; max-height: 40px; overflow: hidden;" colspan="3" id="pubDescLarga">-</td>
                             </tr>
                         </table>
 
-                        <!-- Imágenes -->
-                        <div style="background: #0f172a; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
-                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <span style="font-size: 12px; color: #64748b;">🖼️ Imágenes:</span>
-                                <span id="pubImagenesCount" style="font-size: 11px; color: #94a3b8;">Buscando...</span>
+                        <!-- Sección de imágenes (igual que updateSection) -->
+                        <div id="imagesSectionPublish" style="background: #0f172a; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 8px;">🖼️ Imágenes:</div>
+
+                            <!-- Cargando -->
+                            <div id="loadingImagesPublish" style="display: none; text-align: center; padding: 10px;">
+                                <span class="spinner"></span> Buscando imágenes en ML...
                             </div>
-                            <div id="publishImagenesLista" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;"></div>
+
+                            <!-- Imágenes encontradas -->
+                            <div id="imagesMlPublish" style="display: none;">
+                                <div id="mlInfoPublish" style="font-size: 11px; color: #64748b; margin-bottom: 8px;"></div>
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 11px;">
+                                        <input type="checkbox" id="selectAllMlPublish" onchange="toggleSelectAllPublish()">
+                                        Seleccionar todas
+                                    </label>
+                                    <span id="selectedCountPublish" style="font-size: 11px; color: #94a3b8;">0 seleccionadas</span>
+                                </div>
+                                <div id="mlImagesGridPublish" class="images-grid"></div>
+                            </div>
+
+                            <!-- Sin imágenes -->
+                            <div id="noImagesMsgPublish" style="display: none; text-align: center; color: #64748b; font-size: 12px; padding: 10px;">
+                                No se encontraron imágenes en ML
+                            </div>
                         </div>
 
                         <!-- Ocultos para compatibilidad -->
@@ -873,8 +888,10 @@ header('Content-Type: text/html; charset=utf-8');
                         <div id="publishImagenes" style="display: none;"></div>
                         <div id="publishImagenesContent" style="display: none;"></div>
                         <div id="dimensionesContent" style="display: none;"></div>
+                        <div id="publishImagenesLista" style="display: none;"></div>
+                        <span id="pubImagenesCount" style="display: none;"></span>
 
-                        <button class="success" onclick="publicarProductoDirecto()" id="btnPublicarDirecto" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600;">
+                        <button class="success" onclick="publicarProductoDirecto()" id="btnPublicarDirecto" style="width: 100%; padding: 14px; font-size: 15px; font-weight: 600;">
                             🚀 Publicar en WooCommerce
                         </button>
                     </div>
@@ -887,9 +904,7 @@ header('Content-Type: text/html; charset=utf-8');
                         <table style="width: 100%; background: #0f172a; border-radius: 6px; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
                             <tr>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b; width: 100px;">SKU</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-weight: 600;" id="updSku">-</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b; width: 100px;">Desc. corta</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-size: 11px;" id="updDescCorta">-</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155; font-weight: 600;" colspan="3" id="updSku">-</td>
                             </tr>
                             <tr>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Stock</td>
@@ -1020,12 +1035,56 @@ header('Content-Type: text/html; charset=utf-8');
         let descripcionSeleccionada = null;
         let descripcionParaPublicar = null;
         let dimensionesML = null;
+        let buscarProductoRequestId = 0;
+        let activeOperations = 0;
+        let searchDebounceTimer = null;
+
+        function appendImageVersion(url) {
+            if (!url) return '';
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}v=${Date.now()}`;
+        }
+
+        function setUiBusyState(isBusy) {
+            const searchBtn = document.getElementById('searchBtn');
+            if (searchBtn) {
+                searchBtn.disabled = isBusy;
+            }
+            const publishBtn = document.getElementById('btnPublicarDirecto');
+            if (publishBtn && isBusy && publishBtn.textContent !== '⏳ Publicando...') {
+                publishBtn.disabled = true;
+            }
+        }
+
+        function startOperation() {
+            activeOperations++;
+            setUiBusyState(true);
+        }
+
+        function endOperation() {
+            activeOperations = Math.max(0, activeOperations - 1);
+            if (activeOperations === 0) {
+                setUiBusyState(false);
+            }
+        }
+
+        function debouncedBuscarProducto() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                buscarProducto();
+            }, 250);
+        }
 
         // Limpiar estado del producto anterior
         function limpiarEstadoAnterior() {
             // Limpiar variables globales de ML
             descripcionParaPublicar = null;
             dimensionesML = null;
+            imagenesML = [];
+            imagenesParaPublicar = [];
+            window.imagenesPublish = [];
+            window.imagenesDisponibles = [];
+            descripcionSeleccionada = null;
 
             // Limpiar grilla de imágenes ML
             const mlGrid = document.getElementById('mlImagesGrid');
@@ -1038,6 +1097,23 @@ header('Content-Type: text/html; charset=utf-8');
             // Resetear contador de imágenes
             const pubImagenesCount = document.getElementById('pubImagenesCount');
             if (pubImagenesCount) pubImagenesCount.textContent = 'Buscando...';
+
+            const selectedCountPublish = document.getElementById('selectedCountPublish');
+            if (selectedCountPublish) selectedCountPublish.textContent = '0 seleccionadas';
+
+            const selectAllMlPublish = document.getElementById('selectAllMlPublish');
+            if (selectAllMlPublish) selectAllMlPublish.checked = false;
+
+            const selectAllMl = document.getElementById('selectAllMl');
+            if (selectAllMl) selectAllMl.checked = false;
+
+            // Resetear botón de publicación directa (evitar arrastre de estado visual)
+            const btnPublicar = document.getElementById('btnPublicarDirecto');
+            if (btnPublicar) {
+                btnPublicar.disabled = false;
+                btnPublicar.textContent = '🚀 Publicar en WooCommerce';
+                btnPublicar.className = 'success';
+            }
 
             // Resetear contenedor de descripción
             const descContainer = document.getElementById('publishDescripcionContent');
@@ -1053,12 +1129,15 @@ header('Content-Type: text/html; charset=utf-8');
         }
 
         // Buscar producto
-        async function buscarProducto() {
+        async function buscarProducto(allowWhenBusy = false) {
+            if (activeOperations > 0 && !allowWhenBusy) return;
             const sku = document.getElementById('skuInput').value.trim();
             if (!sku) {
                 addLog('Ingresá un SKU para buscar', 'error');
                 return;
             }
+            const requestId = ++buscarProductoRequestId;
+            startOperation();
 
             // Limpiar estado del producto anterior
             limpiarEstadoAnterior();
@@ -1074,29 +1153,15 @@ header('Content-Type: text/html; charset=utf-8');
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-                // TEST: Usar endpoint ultra básico para verificar
-                addLog('Probando endpoint básico...', '');
-                const testResponse = await fetch(`${API_BASE}/test-json.php?sku=${encodeURIComponent(sku)}`);
-                const testText = await testResponse.text();
-                addLog(`Respuesta raw: ${testText.substring(0, 200)}`, '');
-
-                let testData;
-                try {
-                    testData = JSON.parse(testText);
-                    addLog(`Test OK: ${JSON.stringify(testData)}`, 'success');
-                } catch (jsonError) {
-                    addLog(`✗ Error parseando JSON del test`, 'error');
-                    addLog(`Respuesta completa (primeros 500 chars): ${testText.substring(0, 500)}`, 'error');
-                    throw new Error(`El servidor devolvió HTML en lugar de JSON. Ver consola para detalles.`);
-                }
-
                 // Buscar producto en SIGE y WooCommerce
                 const response = await fetch(`${API_BASE}/product-search.php?sku=${encodeURIComponent(sku)}&api_key=${API_KEY}`, {
-                    signal: controller.signal
+                    signal: controller.signal,
+                    cache: 'no-store'
                 });
                 clearTimeout(timeoutId);
 
                 const responseText = await response.text();
+                if (requestId !== buscarProductoRequestId) return;
                 let data;
                 try {
                     data = JSON.parse(responseText);
@@ -1144,6 +1209,8 @@ header('Content-Type: text/html; charset=utf-8');
                     addLog(`✗ Error: ${error.message}`, 'error');
                 }
                 console.error('Error completo:', error);
+            } finally {
+                endOperation();
             }
         }
 
@@ -1275,6 +1342,14 @@ header('Content-Type: text/html; charset=utf-8');
                 // Mostrar sección de publicación
                 document.getElementById('publishSection').style.display = 'block';
                 document.getElementById('updateSection').style.display = 'none';
+
+                // Asegurar estado limpio del botón de publicación
+                const btnPublicar = document.getElementById('btnPublicarDirecto');
+                if (btnPublicar) {
+                    btnPublicar.disabled = false;
+                    btnPublicar.textContent = '🚀 Publicar en WooCommerce';
+                    btnPublicar.className = 'success';
+                }
                 llenarResumenPublicacion();
 
                 // Buscar imágenes automáticamente
@@ -1314,6 +1389,51 @@ header('Content-Type: text/html; charset=utf-8');
 
         let imagenesParaPublicar = []; // Imágenes seleccionadas para publicar
 
+        // Función para seleccionar/deseleccionar imágenes
+        function toggleImagenPublicar(idx) {
+            if (!window.imagenesDisponibles || !window.imagenesDisponibles[idx]) return;
+
+            const img = window.imagenesDisponibles[idx];
+            img.selected = !img.selected;
+
+            // Actualizar visual
+            const container = document.querySelector(`.img-selectable[data-idx="${idx}"]`);
+            if (container) {
+                const imgEl = container.querySelector('img');
+                const check = container.querySelector('.img-check');
+
+                if (img.selected) {
+                    imgEl.style.border = '2px solid #22c55e';
+                    imgEl.style.opacity = '1';
+                    check.style.display = 'block';
+                } else {
+                    imgEl.style.border = '2px solid #475569';
+                    imgEl.style.opacity = '0.5';
+                    check.style.display = 'none';
+                }
+            }
+
+            // Actualizar array de imágenes a publicar
+            imagenesParaPublicar = window.imagenesDisponibles
+                .filter(i => i.selected)
+                .map(i => i.url);
+
+            // Actualizar contador
+            const countEl = document.getElementById('imagenesCount');
+            if (countEl) {
+                countEl.textContent = `${imagenesParaPublicar.length} seleccionadas`;
+            }
+
+            const countSpan = document.getElementById('pubImagenesCount');
+            if (countSpan) {
+                if (imagenesParaPublicar.length > 0) {
+                    countSpan.innerHTML = `<span style="color: #22c55e;">✓ ${imagenesParaPublicar.length} imagen(es)</span>`;
+                } else {
+                    countSpan.innerHTML = `<span style="color: #f59e0b;">Sin imágenes seleccionadas</span>`;
+                }
+            }
+        }
+
         function llenarResumenPublicacion() {
             if (!productoActual) return;
 
@@ -1344,8 +1464,7 @@ header('Content-Type: text/html; charset=utf-8');
             if (productoActual.profundidad) dims.push(productoActual.profundidad + ' prof.');
             document.getElementById('pubDimensiones').textContent = dims.length ? dims.join(' × ') + ' cm' : 'No especificadas';
 
-            // Descripciones
-            document.getElementById('pubDescCorta').textContent = productoActual.nombre || '-';
+            // Descripción larga
             document.getElementById('pubDescLarga').textContent = productoActual.descripcion_larga || '⏳ Buscando descripción...';
 
             // Llenar datos de ML si faltan
@@ -1396,9 +1515,6 @@ header('Content-Type: text/html; charset=utf-8');
             if (ancho && ancho != '0' && ancho != '') dims.push(ancho + ' ancho');
             if (profundidad && profundidad != '0' && profundidad != '') dims.push(profundidad + ' prof.');
             document.getElementById('updDimensiones').textContent = dims.length ? dims.join(' × ') + ' cm' : 'No especificadas';
-
-            // Descripciones
-            document.getElementById('updDescCorta').textContent = productoActual.nombre || '-';
 
             // Para descripción larga, mostrar la de WooCommerce si existe
             let descLarga = productoActual.descripcion_larga || '';
@@ -1532,52 +1648,144 @@ header('Content-Type: text/html; charset=utf-8');
         }
 
         async function buscarImagenesParaPublicar() {
-            const lista = document.getElementById('publishImagenesLista');
-            const countSpan = document.getElementById('pubImagenesCount');
+            const loadingEl = document.getElementById('loadingImagesPublish');
+            const imagesEl = document.getElementById('imagesMlPublish');
+            const noImagesEl = document.getElementById('noImagesMsgPublish');
+            const gridEl = document.getElementById('mlImagesGridPublish');
+            const infoEl = document.getElementById('mlInfoPublish');
+            const countEl = document.getElementById('selectedCountPublish');
+            const selectAllEl = document.getElementById('selectAllMlPublish');
 
-            if (countSpan) countSpan.textContent = '⏳ Buscando...';
+            // Mostrar loading
+            loadingEl.style.display = 'block';
+            imagesEl.style.display = 'none';
+            noImagesEl.style.display = 'none';
+
             addLog('Buscando imágenes en ML...', '');
 
             try {
-                // Usar el servidor (endpoint que funciona con /products/search)
                 const response = await fetch(`${API_BASE}/image-search.php?api_key=${API_KEY}&sku=${encodeURIComponent(productoActual.sku)}`);
                 const data = await response.json();
 
+                loadingEl.style.display = 'none';
+
                 if (data.success && data.imagenes?.mercadolibre?.imagenes?.length > 0) {
                     const imagenes = data.imagenes.mercadolibre.imagenes;
+                    const imagenesMostradas = imagenes.slice(0, 8);
                     const encontradoPor = data.imagenes.mercadolibre.encontrado_por || 'ML';
+                    const productoML = data.imagenes.mercadolibre.producto?.nombre || '';
 
                     addLog(`✓ ${imagenes.length} imagen(es) encontradas (${encontradoPor})`, 'success');
 
-                    imagenesParaPublicar = imagenes.map(img => img.url);
+                    // Guardar imágenes disponibles (todas seleccionadas por defecto)
+                    window.imagenesPublish = imagenesMostradas.map(img => ({ url: img.url, selected: true }));
+                    imagenesParaPublicar = imagenesMostradas.map(img => img.url);
 
-                    lista.innerHTML = `
-                        <div style="font-size: 11px; color: #22c55e; margin-bottom: 8px;">
-                            ✓ ${imagenes.length} imagen(es) de ML - ${encontradoPor}
-                        </div>
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            ${imagenes.slice(0, 5).map((img, idx) => `
-                                <div style="position: relative;">
-                                    <img src="${img.url}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 2px solid #22c55e;">
-                                    <div style="position: absolute; top: 2px; right: 2px; background: #22c55e; color: white; font-size: 10px; padding: 1px 4px; border-radius: 3px;">✓</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
+                    // Info del producto ML
+                    infoEl.innerHTML = productoML
+                        ? `📦 <span style="color: #94a3b8;">${productoML.substring(0, 80)}${productoML.length > 80 ? '...' : ''}</span> <span style="color: #3b82f6;">(${encontradoPor})</span>`
+                        : `<span style="color: #3b82f6;">Encontrado por ${encontradoPor}</span>`;
 
-                    if (countSpan) countSpan.innerHTML = `<span style="color: #22c55e;">✓ ${imagenes.length} imagen(es)</span>`;
+                    // Renderizar grid de imágenes
+                    gridEl.innerHTML = imagenesMostradas.map((img, idx) => `
+                        <div class="image-item selected" data-idx="${idx}" onclick="toggleImagePublish(${idx})" style="position: relative; cursor: pointer;">
+                            <img src="${appendImageVersion(img.url)}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 2px solid #22c55e;">
+                            <div class="check-badge" style="position: absolute; top: -4px; right: -4px; background: #22c55e; color: white; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px;">✓</div>
+                        </div>
+                    `).join('');
+
+                    // Actualizar contador
+                    countEl.textContent = `${imagenesMostradas.length} seleccionadas`;
+                    selectAllEl.checked = true;
+
+                    imagesEl.style.display = 'block';
                 } else {
                     addLog('⚠️ No se encontraron imágenes en ML', 'warning');
-                    lista.innerHTML = `<div style="color: #f59e0b; font-size: 12px;">⚠️ Sin imágenes en ML. Se publicará sin imagen.</div>`;
-                    if (countSpan) countSpan.innerHTML = `<span style="color: #f59e0b;">Sin imágenes</span>`;
+                    noImagesEl.style.display = 'block';
+                    imagenesParaPublicar = [];
                 }
             } catch (error) {
+                loadingEl.style.display = 'none';
+                noImagesEl.style.display = 'block';
+                noImagesEl.innerHTML = `<span style="color: #ef4444;">Error buscando imágenes: ${error.message}</span>`;
                 addLog(`✗ Error: ${error.message}`, 'error');
-                if (countSpan) countSpan.innerHTML = `<span style="color: #ef4444;">Error</span>`;
+            }
+        }
+
+        // Toggle imagen individual en publicación
+        function toggleImagePublish(idx) {
+            if (!window.imagenesPublish || !window.imagenesPublish[idx]) return;
+
+            window.imagenesPublish[idx].selected = !window.imagenesPublish[idx].selected;
+            const isSelected = window.imagenesPublish[idx].selected;
+
+            const gridEl = document.getElementById('mlImagesGridPublish');
+            const item = gridEl.children[idx];
+            if (item) {
+                const img = item.querySelector('img');
+                const badge = item.querySelector('.check-badge');
+                if (isSelected) {
+                    item.classList.add('selected');
+                    img.style.border = '2px solid #22c55e';
+                    badge.style.display = 'flex';
+                } else {
+                    item.classList.remove('selected');
+                    img.style.border = '2px solid #334155';
+                    badge.style.display = 'none';
+                }
+            }
+
+            // Actualizar array de imágenes para publicar
+            imagenesParaPublicar = window.imagenesPublish
+                .filter(img => img.selected)
+                .map(img => img.url);
+
+            // Actualizar contador
+            const countEl = document.getElementById('selectedCountPublish');
+            countEl.textContent = `${imagenesParaPublicar.length} seleccionadas`;
+
+            // Actualizar checkbox "seleccionar todas"
+            const selectAllEl = document.getElementById('selectAllMlPublish');
+            selectAllEl.checked = imagenesParaPublicar.length === window.imagenesPublish.length;
+        }
+
+        // Toggle seleccionar todas en publicación
+        function toggleSelectAllPublish() {
+            const selectAllEl = document.getElementById('selectAllMlPublish');
+            const selectAll = selectAllEl.checked;
+
+            if (window.imagenesPublish) {
+                window.imagenesPublish.forEach((img, idx) => {
+                    img.selected = selectAll;
+                    const gridEl = document.getElementById('mlImagesGridPublish');
+                    const item = gridEl.children[idx];
+                    if (item) {
+                        const imgEl = item.querySelector('img');
+                        const badge = item.querySelector('.check-badge');
+                        if (selectAll) {
+                            item.classList.add('selected');
+                            imgEl.style.border = '2px solid #22c55e';
+                            badge.style.display = 'flex';
+                        } else {
+                            item.classList.remove('selected');
+                            imgEl.style.border = '2px solid #334155';
+                            badge.style.display = 'none';
+                        }
+                    }
+                });
+
+                imagenesParaPublicar = selectAll
+                    ? window.imagenesPublish.map(img => img.url)
+                    : [];
+
+                const countEl = document.getElementById('selectedCountPublish');
+                countEl.textContent = `${imagenesParaPublicar.length} seleccionadas`;
             }
         }
 
         async function publicarProductoDirecto() {
+            if (activeOperations > 0) return;
+            startOperation();
             const btn = document.getElementById('btnPublicarDirecto');
             btn.disabled = true;
             btn.textContent = '⏳ Publicando...';
@@ -1618,35 +1826,19 @@ header('Content-Type: text/html; charset=utf-8');
                         addLog(`✓ Categorías: ${catNames}`, 'success');
                     }
 
-                    // Actualizar UI
-                    wooProducto = data.product;
-                    esAlta = false;
+                    // Confirmar estado real en backend para evitar falsos "Publicado"
+                    addLog('Validando estado en WooCommerce...', '');
+                    await buscarProducto(true);
 
-                    // Cambiar a modo modificación
-                    document.getElementById('publishSection').style.display = 'none';
-                    document.getElementById('updateSection').style.display = 'block';
-
-                    // Llenar tabla resumen de actualización
-                    llenarResumenActualizacion();
-
-                    // Actualizar banner de estado a PUBLICADO
-                    const statusBanner = document.getElementById('statusBanner');
-                    const statusText = document.getElementById('statusText');
-                    const statusSubtext = document.getElementById('statusSubtext');
-                    const statusAction = document.getElementById('statusAction');
-
-                    statusBanner.className = 'product-status-banner published';
-                    statusText.textContent = '✓ Publicado en la web';
-                    statusSubtext.innerHTML = `<a href="${wooProducto.permalink}" target="_blank" style="color: white; text-decoration: underline;">Ver producto en la tienda →</a>`;
-                    statusAction.textContent = '⏸️ Pausar';
-                    statusAction.style.display = 'block';
-                    statusAction.onclick = desactivarProducto;
-
-                    // Buscar imágenes automáticamente
-                    buscarImagenesAuto();
-
-                    btn.textContent = '✓ Publicado';
-                    btn.className = 'success';
+                    if (wooProducto && wooProducto.status === 'publish') {
+                        btn.textContent = '✓ Publicado';
+                        btn.className = 'success';
+                    } else {
+                        btn.disabled = false;
+                        btn.textContent = '🚀 Reintentar';
+                        btn.className = '';
+                        addLog('⚠ El producto no quedó publicado todavía. Reintentá en unos segundos.', 'warning');
+                    }
                 } else {
                     throw new Error(data.error || 'Error desconocido');
                 }
@@ -1654,6 +1846,8 @@ header('Content-Type: text/html; charset=utf-8');
                 addLog(`✗ Error: ${error.message}`, 'error');
                 btn.disabled = false;
                 btn.textContent = '🚀 Reintentar';
+            } finally {
+                endOperation();
             }
         }
 
@@ -1745,7 +1939,7 @@ header('Content-Type: text/html; charset=utf-8');
                     if (wooGrid) {
                         wooGrid.innerHTML = data.woocommerce.imagenes.map(img => `
                             <div class="image-card">
-                                <img src="${img.src}" alt="${img.name || 'Imagen'}">
+                                <img src="${appendImageVersion(img.src)}" alt="${img.name || 'Imagen'}">
                             </div>
                         `).join('');
                         wooDiv.style.display = 'block';
@@ -1766,7 +1960,7 @@ header('Content-Type: text/html; charset=utf-8');
                     if (mlGrid) {
                         mlGrid.innerHTML = ml.imagenes.map((img, idx) => `
                             <div class="image-card" data-idx="${idx}" onclick="toggleImageSelect(this)">
-                                <img src="${img.url}" alt="Imagen ${idx + 1}">
+                                <img src="${appendImageVersion(img.url)}" alt="Imagen ${idx + 1}">
                                 <div class="img-check">✓</div>
                             </div>
                         `).join('');
@@ -1887,14 +2081,13 @@ header('Content-Type: text/html; charset=utf-8');
                 }
             }
 
-            // TEMPORALMENTE DESHABILITADO - Búsqueda ML
             // Buscar en ML solo si NO hay descripciones disponibles o es ALTA
-            // const tieneDescripcionDisponible = options.length > 0;
-            // if (!tieneDescripcionDisponible || esAlta) {
-            //     if (productoActual.part_number || productoActual.sku) {
-            //         buscarDescripcionML();
-            //     }
-            // }
+            const tieneDescripcionDisponible = options.length > 0;
+            if (!tieneDescripcionDisponible || esAlta) {
+                if (productoActual.part_number || productoActual.sku) {
+                    buscarDescripcionML();
+                }
+            }
 
             // Actualizar botón global
             actualizarBotonGlobal();
@@ -2542,7 +2735,7 @@ header('Content-Type: text/html; charset=utf-8');
                     if (wooGrid) {
                         wooGrid.innerHTML = data.woocommerce.imagenes.map(img => `
                             <div class="image-card">
-                                <img src="${img.src}" alt="${img.name || 'Imagen'}">
+                                <img src="${appendImageVersion(img.src)}" alt="${img.name || 'Imagen'}">
                                 <div class="img-source">WooCommerce</div>
                             </div>
                         `).join('');
@@ -2578,7 +2771,7 @@ header('Content-Type: text/html; charset=utf-8');
 
                     mlGrid.innerHTML = ml.imagenes.map((img, idx) => `
                         <div class="image-card ${esAlta ? 'selected' : ''}" data-idx="${idx}" onclick="toggleImageSelect(this)">
-                            <img src="${img.url}" alt="Imagen ${idx + 1}">
+                            <img src="${appendImageVersion(img.url)}" alt="Imagen ${idx + 1}">
                             <div class="img-check">${esAlta ? '✓' : ''}</div>
                             <div class="img-source">ML</div>
                         </div>
@@ -2716,9 +2909,8 @@ header('Content-Type: text/html; charset=utf-8');
                 }
             }
 
-            // TEMPORALMENTE DESHABILITADO - Búsqueda dimensiones ML
             // Si faltan dimensiones o peso Y es producto ALTA, buscar en ML
-            if (false && (faltaPeso || faltaDimensiones) && esAlta) {
+            if ((faltaPeso || faltaDimensiones) && esAlta) {
                 try {
                     addLog('Buscando dimensiones en Mercado Libre...', '');
 

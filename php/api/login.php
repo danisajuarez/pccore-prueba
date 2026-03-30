@@ -17,7 +17,7 @@ if (file_exists($autoloadPath)) {
     } elseif (isset($_GET['cliente'])) {
         $CLIENTE_ID = strtolower($_GET['cliente']);
     } else {
-        $CLIENTE_ID = 'pccoreprueba';
+        $CLIENTE_ID = 'pccore';
     }
 }
 

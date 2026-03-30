@@ -4,7 +4,7 @@ ini_set('display_errors', 1);
 header('Content-Type: application/json; charset=utf-8');
 
 // Conexión directa sin pasar por config.php
-$clienteId = 'pccoreprueba';
+$clienteId = 'pccore';
 $configFile = __DIR__ . '/../config/' . $clienteId . '.txt';
 
 if (!file_exists($configFile)) {

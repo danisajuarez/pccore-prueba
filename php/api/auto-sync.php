@@ -60,8 +60,9 @@ try {
                    (s.pal_precvtaart / (1 + (a.ART_PorcIVARI / 100))) AS precio_sin_iva
             FROM sige_prs_presho s
             INNER JOIN sige_art_articulo a ON a.ART_IDArticulo = s.art_idarticulo
-            WHERE s.pal_precvtaart <> s.prs_precvtaart
-               OR s.prs_disponible <> s.ads_disponible
+            WHERE (s.pal_precvtaart <> s.prs_precvtaart
+               OR s.prs_disponible <> s.ads_disponible)
+            --    and s.art_idarticulo = 'DCPT530DW'
             LIMIT " . BATCH_SIZE;
 
     $result = $db->query($sql);
