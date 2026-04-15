@@ -10,6 +10,11 @@
  * }
  */
 
+// Capturar cualquier output/warning para evitar contaminar JSON
+ob_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../bootstrap.php';
@@ -17,6 +22,7 @@ require_once __DIR__ . '/../bootstrap.php';
 // Solo permitir POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'Método no permitido']);
     exit();
 }
@@ -24,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // Requiere autenticación por sesión
 if (!isAuthenticated()) {
     http_response_code(401);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'No autenticado']);
     exit();
 }
@@ -33,6 +40,7 @@ $apiKey = $_GET['api_key'] ?? $_SERVER['HTTP_X_API_KEY'] ?? '';
 $expectedKey = getClienteId() . '-sync-2024';
 if ($apiKey !== $expectedKey) {
     http_response_code(401);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'API Key inválida']);
     exit();
 }
@@ -75,12 +83,14 @@ $reemplazar = $input['reemplazar'] ?? false;
 
 if (empty($sku)) {
     http_response_code(400);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'SKU es requerido']);
     exit();
 }
 
 if (empty($imagenes) || !is_array($imagenes)) {
     http_response_code(400);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'Se requiere al menos una URL de imagen']);
     exit();
 }
@@ -100,6 +110,7 @@ try {
     }
 
     if ($wooProduct === null) {
+        ob_end_clean();
         echo json_encode([
             'success' => false,
             'error' => 'Producto no encontrado en WooCommerce. Debe publicarlo primero.'
@@ -135,6 +146,7 @@ try {
     }
 
     if (empty($nuevasImagenes)) {
+        ob_end_clean();
         echo json_encode([
             'success' => false,
             'error' => 'No hay imágenes válidas para subir'
@@ -147,6 +159,7 @@ try {
 
     // Debug mode
     if (isset($_GET['debug'])) {
+        ob_end_clean();
         echo json_encode([
             'debug' => true,
             'product_id' => $productId,
@@ -179,6 +192,7 @@ try {
         // Verificar cuántas imágenes tiene ahora
         $imagenesResultado = $result['images'] ?? [];
 
+        ob_end_clean();
         echo json_encode([
             'success' => true,
             'message' => 'Imágenes actualizadas correctamente',
@@ -204,6 +218,7 @@ try {
 
 } catch (Exception $e) {
     http_response_code(500);
+    ob_end_clean();
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage()

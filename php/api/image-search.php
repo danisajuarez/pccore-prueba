@@ -9,6 +9,11 @@
  * 2. Mercado Libre (por SKU, Part Number o nombre)
  */
 
+// Capturar cualquier output/warning para evitar contaminar JSON
+ob_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../bootstrap.php';
@@ -17,6 +22,7 @@ require_once __DIR__ . '/../config/mercadolibre.php';
 // Solo permitir GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'Método no permitido']);
     exit();
 }
@@ -24,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 // Requiere autenticación por sesión
 if (!isAuthenticated()) {
     http_response_code(401);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'No autenticado']);
     exit();
 }
@@ -33,6 +40,7 @@ $apiKey = $_GET['api_key'] ?? $_SERVER['HTTP_X_API_KEY'] ?? '';
 $expectedKey = getClienteId() . '-sync-2024';
 if ($apiKey !== $expectedKey) {
     http_response_code(401);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'API Key inválida']);
     exit();
 }
@@ -42,6 +50,7 @@ $sku = trim($_GET['sku'] ?? '');
 
 if (empty($sku)) {
     http_response_code(400);
+    ob_end_clean();
     echo json_encode(['success' => false, 'error' => 'SKU es requerido']);
     exit();
 }
@@ -69,6 +78,7 @@ try {
     $stmt->close();
 
     if (!$articulo) {
+        ob_end_clean();
         echo json_encode([
             'success' => false,
             'error' => 'Artículo no encontrado en SIGE'
@@ -152,10 +162,12 @@ try {
     }
 
     $conn->close();
+    ob_end_clean();
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
 } catch (Exception $e) {
     http_response_code(500);
+    ob_end_clean();
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage()
