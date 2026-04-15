@@ -1,0 +1,22 @@
+; Configuración Digital Pergamino
+; ================================
+
+; WooCommerce API
+wc_url=https://digitalpergamino.com.ar/wp-json/wc/v3
+wc_key=ck_ab9ddc3d0d68cb906101657f471454d722d1da5c
+wc_secret=cs_4af3b6eda40f6e4e93a44cf8ff6f524689e9afdb
+
+; Base de datos SIGE (productos/stock)
+db_host=giuggia.dyndns-home.com
+db_port=3307
+db_user=root
+db_pass=giuggia
+db_name=giuggia
+
+; Configuración SIGE
+lista_precio=2
+deposito=1
+
+; Login admin (fallback)
+admin_user=admin
+admin_pass=digitalpergamino2024

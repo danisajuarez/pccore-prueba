@@ -21,7 +21,7 @@ class AppConfig
     }
 
     /**
-     * Detectar el ID del cliente desde el subdominio
+     * Detectar el ID del cliente desde el subdominio o dominio
      */
     private function detectClienteId(): string
     {
@@ -30,6 +30,20 @@ class AppConfig
         // Si es subdominio.antartidasige.com, extraer subdominio
         if (preg_match('/^([a-zA-Z0-9-]+)\.antartidasige\.com$/', $host, $matches)) {
             return strtolower($matches[1]);
+        }
+
+        // Mapeo de dominios personalizados a clientes
+        $dominiosClientes = [
+            'digitalpergamino.com.ar' => 'digitalpergamino',
+            'dev.digitalpergamino.com.ar' => 'digitalpergamino',
+            'www.digitalpergamino.com.ar' => 'digitalpergamino',
+            'pccore.com.ar' => 'pccore',
+            'www.pccore.com.ar' => 'pccore',
+        ];
+
+        // Verificar si el host coincide con algún dominio mapeado
+        if (isset($dominiosClientes[$host])) {
+            return $dominiosClientes[$host];
         }
 
         // Para desarrollo local o acceso directo, usar parámetro o default
