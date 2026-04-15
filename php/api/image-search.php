@@ -19,6 +19,25 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/mercadolibre.php';
 
+/**
+ * Sanitizar datos recursivamente para json_encode
+ * Asegura que todos los strings estén en UTF-8 válido
+ */
+function sanitizeForJson($data) {
+    if (is_array($data)) {
+        return array_map('sanitizeForJson', $data);
+    } elseif (is_string($data)) {
+        // Asegurar UTF-8 válido
+        if (!mb_check_encoding($data, 'UTF-8')) {
+            $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+        }
+        // Limpiar caracteres de control problemáticos
+        $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $data);
+        return $data;
+    }
+    return $data;
+}
+
 // Solo permitir GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -133,25 +152,25 @@ try {
         $wooProducts = wcRequest('/products?sku=' . urlencode($sku));
         $wooProduct = null;
 
-        // Buscar el producto con SKU exacto
-        if (!empty($wooProducts)) {
+        // Validar que wcRequest devolvió un array válido
+        if (is_array($wooProducts) && !empty($wooProducts)) {
             foreach ($wooProducts as $p) {
-                if (strcasecmp(trim($p['sku']), trim($sku)) === 0) {
+                if (is_array($p) && strcasecmp(trim($p['sku'] ?? ''), trim($sku)) === 0) {
                     $wooProduct = $p;
                     break;
                 }
             }
         }
 
-        if ($wooProduct !== null) {
+        if ($wooProduct !== null && is_array($wooProduct)) {
             $response['woocommerce'] = [
                 'id' => $wooProduct['id'],
                 'tiene_imagenes' => !empty($wooProduct['images']),
                 'cantidad_imagenes' => count($wooProduct['images'] ?? []),
                 'imagenes' => array_map(function($img) {
                     return [
-                        'id' => $img['id'],
-                        'src' => $img['src'],
+                        'id' => $img['id'] ?? null,
+                        'src' => $img['src'] ?? '',
                         'name' => $img['name'] ?? ''
                     ];
                 }, $wooProduct['images'] ?? [])
@@ -162,14 +181,34 @@ try {
     }
 
     $conn->close();
+    
+    // Asegurar que todos los datos están en UTF-8 válido antes de json_encode
+    $response = sanitizeForJson($response);
+    
     ob_end_clean();
-    echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    
+    // Intentar json_encode con validación
+    $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Error al serializar datos: ' . json_last_error_msg()
+        ]);
+    } else {
+        echo $json;
+    }
 
 } catch (Exception $e) {
     http_response_code(500);
     ob_end_clean();
+    $errorMsg = $e->getMessage();
+    // Sanitizar mensaje de error
+    if (!mb_check_encoding($errorMsg, 'UTF-8')) {
+        $errorMsg = mb_convert_encoding($errorMsg, 'UTF-8', 'UTF-8');
+    }
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
-    ]);
+        'error' => $errorMsg
+    ], JSON_UNESCAPED_UNICODE);
 }

@@ -1688,6 +1688,11 @@ header('Content-Type: text/html; charset=utf-8');
 
             try {
                 const response = await fetch(`${API_BASE}/image-search.php?api_key=${API_KEY}&sku=${encodeURIComponent(productoActual.sku)}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
 
                 loadingEl.style.display = 'none';
@@ -1944,6 +1949,10 @@ header('Content-Type: text/html; charset=utf-8');
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
 
                 const data = await response.json();
                 loading.style.display = 'none';
@@ -2742,6 +2751,10 @@ header('Content-Type: text/html; charset=utf-8');
                 });
                 clearTimeout(timeoutId);
 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
 
                 loading.style.display = 'none';

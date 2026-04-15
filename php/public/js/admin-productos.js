@@ -301,6 +301,11 @@ async function buscarImagenes() {
 
     try {
         const response = await fetch(`${API_BASE}/image-search.php?sku=${encodeURIComponent(productoActual.sku)}&api_key=${API_KEY}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
 
         loading.style.display = 'none';

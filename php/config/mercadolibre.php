@@ -171,6 +171,10 @@ function buscarImagenesML($query, $nombreOriginal = null, $validarEstricto = tru
         foreach ($mejorCandidato['pictures'] as $pic) {
             $url = $pic['url'] ?? null;
             if ($url) {
+                // Asegurar que la URL está en UTF-8 válido
+                if (!mb_check_encoding($url, 'UTF-8')) {
+                    $url = mb_convert_encoding($url, 'UTF-8', 'UTF-8');
+                }
                 // Cambiar a máxima calidad
                 $url = preg_replace('/-[A-Z]\./', '-O.', $url);
                 $imagenes[] = [
@@ -191,7 +195,16 @@ function buscarImagenesML($query, $nombreOriginal = null, $validarEstricto = tru
                 'id' => $mejorCandidato['id'],
                 'nombre' => $mejorCandidato['name'],
                 'atributos' => array_map(function($attr) {
-                    return ['nombre' => $attr['name'] ?? '', 'valor' => $attr['value_name'] ?? ''];
+                    $nombre = $attr['name'] ?? '';
+                    $valor = $attr['value_name'] ?? '';
+                    // Asegurar UTF-8 válido en atributos
+                    if (!mb_check_encoding($nombre, 'UTF-8')) {
+                        $nombre = mb_convert_encoding($nombre, 'UTF-8', 'UTF-8');
+                    }
+                    if (!mb_check_encoding($valor, 'UTF-8')) {
+                        $valor = mb_convert_encoding($valor, 'UTF-8', 'UTF-8');
+                    }
+                    return ['nombre' => $nombre, 'valor' => $valor];
                 }, $mejorCandidato['attributes'] ?? [])
             ],
             'imagenes' => $imagenes

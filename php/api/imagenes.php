@@ -376,6 +376,11 @@ $API_KEY = $CLIENTE_ID . '-sync-2024';
 
             try {
                 const response = await fetch(`/api/image-search.php?sku=${encodeURIComponent(sku)}&api_key=${API_KEY}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
 
                 loading.style.display = 'none';
