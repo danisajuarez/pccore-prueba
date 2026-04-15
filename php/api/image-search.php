@@ -19,6 +19,57 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/mercadolibre.php';
 
+// ============================================================================
+// FUNCIONES PUENTE - Conexión dinámica multi-tenant
+// ============================================================================
+
+/**
+ * Obtener conexión mysqli del cliente actual (desde sesión)
+ */
+function getDbConnection() {
+    $dbService = getSigeConnection();
+    return $dbService->getConnection();
+}
+
+/**
+ * Request a WooCommerce API (usa credenciales de sesión)
+ */
+function wcRequest($endpoint, $method = 'GET', $data = null) {
+    $url = WC_BASE_URL . $endpoint;
+    $url .= (strpos($url, '?') === false ? '?' : '&');
+    $url .= 'consumer_key=' . WC_CONSUMER_KEY . '&consumer_secret=' . WC_CONSUMER_SECRET;
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $method === 'GET' ? 30 : 120);
+
+    if ($method === 'PUT' || $method === 'POST') {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    }
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($error) {
+        throw new Exception("CURL Error: $error");
+    }
+
+    if ($httpCode >= 400) {
+        throw new Exception("WooCommerce API error: $httpCode");
+    }
+
+    return json_decode($response, true);
+}
+
+// ============================================================================
+
 /**
  * Sanitizar datos recursivamente para json_encode
  * Asegura que todos los strings estén en UTF-8 válido
@@ -188,12 +239,14 @@ try {
     ob_end_clean();
     
     // Intentar json_encode con validación
-    $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR);
     if ($json === false) {
         http_response_code(500);
+        $errorMsg = json_last_error_msg();
         echo json_encode([
             'success' => false,
-            'error' => 'Error al serializar datos: ' . json_last_error_msg()
+            'error' => 'Error al serializar datos: ' . $errorMsg,
+            'json_error_code' => json_last_error()
         ]);
     } else {
         echo $json;
