@@ -2,21 +2,82 @@
 
 namespace App\Database;
 
-use App\Config\AppConfig;
 use Exception;
 use mysqli;
 
 /**
- * Servicio de conexión a base de datos MySQL
+ * Servicio de conexión a base de datos SIGE (Multi-tenant)
+ *
+ * Lee las credenciales de conexión desde la sesión del cliente.
+ * Cada cliente tiene su propia BD SIGE configurada en sige_two_terwoo.
  */
 class DatabaseService
 {
-    private AppConfig $config;
     private ?mysqli $connection = null;
+    private array $credentials = [];
 
-    public function __construct(AppConfig $config)
+    /**
+     * Constructor
+     *
+     * @param array|null $credentials Credenciales manuales (opcional)
+     *                                Si no se pasan, se leen de la sesión
+     */
+    public function __construct(?array $credentials = null)
     {
-        $this->config = $config;
+        if ($credentials !== null) {
+            $this->credentials = $credentials;
+        } else {
+            $this->loadCredentialsFromSession();
+        }
+    }
+
+    /**
+     * Cargar credenciales desde la sesión
+     */
+    private function loadCredentialsFromSession(): void
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if (!isset($_SESSION['cliente_config'])) {
+            throw new Exception("No hay sesión de cliente activa. Debe iniciar sesión primero.");
+        }
+
+        $config = $_SESSION['cliente_config'];
+
+        $this->credentials = [
+            'host' => $config['db_host'] ?? null,
+            'user' => $config['db_user'] ?? null,
+            'pass' => $config['db_pass'] ?? null,
+            'name' => $config['db_name'] ?? null,
+            'port' => $config['db_port'] ?? 3306,
+        ];
+
+        // Validar que tenemos todas las credenciales necesarias
+        if (empty($this->credentials['host']) || empty($this->credentials['user']) ||
+            empty($this->credentials['name'])) {
+            throw new Exception("Configuración de BD incompleta para este cliente.");
+        }
+    }
+
+    /**
+     * Crear instancia con credenciales específicas (factory method)
+     */
+    public static function withCredentials(
+        string $host,
+        string $user,
+        string $pass,
+        string $name,
+        int $port = 3306
+    ): self {
+        return new self([
+            'host' => $host,
+            'user' => $user,
+            'pass' => $pass,
+            'name' => $name,
+            'port' => $port,
+        ]);
     }
 
     /**
@@ -38,15 +99,15 @@ class DatabaseService
     private function connect(): void
     {
         $this->connection = new mysqli(
-            $this->config->getDbHost(),
-            $this->config->getDbUser(),
-            $this->config->getDbPass(),
-            $this->config->getDbName(),
-            $this->config->getDbPort()
+            $this->credentials['host'],
+            $this->credentials['user'],
+            $this->credentials['pass'] ?? '',
+            $this->credentials['name'],
+            $this->credentials['port']
         );
 
         if ($this->connection->connect_error) {
-            throw new Exception("Error de conexión: " . $this->connection->connect_error);
+            throw new Exception("Error de conexión a BD SIGE: " . $this->connection->connect_error);
         }
 
         $this->connection->set_charset("utf8");
@@ -133,6 +194,20 @@ class DatabaseService
     public function lastInsertId(): int
     {
         return $this->getConnection()->insert_id;
+    }
+
+    /**
+     * Obtener las credenciales actuales (para debug)
+     */
+    public function getCredentials(): array
+    {
+        return [
+            'host' => $this->credentials['host'],
+            'user' => $this->credentials['user'],
+            'name' => $this->credentials['name'],
+            'port' => $this->credentials['port'],
+            // No exponemos el password
+        ];
     }
 
     /**

@@ -2,95 +2,66 @@
 
 namespace App\Auth;
 
-use App\Config\AppConfig;
-use App\Database\DatabaseService;
+use App\Database\MasterDatabase;
 use Exception;
 
 /**
- * Servicio de autenticación de usuarios
+ * Servicio de autenticación Multi-tenant
+ *
+ * Valida usuarios contra la BD Master (sige_two_terwoo)
+ * y carga la configuración del cliente en sesión.
  */
 class AuthService
 {
-    private DatabaseService $db;
     private SessionManager $session;
-    private AppConfig $config;
 
-    public function __construct(
-        DatabaseService $db,
-        SessionManager $session,
-        AppConfig $config
-    ) {
-        $this->db = $db;
+    public function __construct(SessionManager $session)
+    {
         $this->session = $session;
-        $this->config = $config;
     }
 
     /**
-     * Intentar login con credenciales
+     * Intentar login con ID de cliente y password
      *
-     * @param string $username
-     * @param string $password
-     * @return array|false Datos del usuario si es exitoso, false si falla
+     * @param int $clienteId TER_IdTercero
+     * @param string $password TWO_Pass
+     * @return array|false Datos del cliente si es exitoso, false si falla
      */
-    public function attempt(string $username, string $password)
+    public function attempt(int $clienteId, string $password)
     {
         try {
-            $sql = "SELECT USU_IDUsuario, USU_LogUsu, USU_DatosUsu, USU_Habilitado
-                    FROM sige_usu_usuario
-                    WHERE USU_LogUsu = ? AND USU_PassWord = ?";
+            $cliente = MasterDatabase::findCliente($clienteId, $password);
 
-            $result = $this->db->query($sql, 'ss', [$username, $password]);
-
-            if ($result && $row = $result->fetch_assoc()) {
-                // Verificar si el usuario está habilitado
-                if ($row['USU_Habilitado'] !== 'S') {
-                    return false;
-                }
-
-                return [
-                    'USU_IDUsuario' => $row['USU_IDUsuario'],
-                    'USU_LogUsu' => $row['USU_LogUsu'],
-                    'USU_DatosUsu' => $row['USU_DatosUsu']
-                ];
+            if ($cliente === null) {
+                return false;
             }
 
-            return false;
+            return $cliente;
 
         } catch (Exception $e) {
-            // Fallback a credenciales del config si falla la BD
-            return $this->attemptFallback($username, $password);
+            error_log("Error en login: " . $e->getMessage());
+            return false;
         }
-    }
-
-    /**
-     * Login de fallback usando credenciales del archivo de config
-     */
-    private function attemptFallback(string $username, string $password)
-    {
-        if ($username === $this->config->getAdminUser() &&
-            $password === $this->config->getAdminPass()) {
-            return [
-                'USU_IDUsuario' => 1,
-                'USU_LogUsu' => $username,
-                'USU_DatosUsu' => 'Administrador'
-            ];
-        }
-
-        return false;
     }
 
     /**
      * Realizar login completo
+     *
+     * @param int $clienteId TER_IdTercero
+     * @param string $password TWO_Pass
+     * @return bool
      */
-    public function login(string $username, string $password): bool
+    public function login(int $clienteId, string $password): bool
     {
-        $userData = $this->attempt($username, $password);
+        $clienteData = $this->attempt($clienteId, $password);
 
-        if ($userData === false) {
+        if ($clienteData === false) {
             return false;
         }
 
-        $this->session->login($userData);
+        // Guardar datos del cliente en sesión
+        $this->session->login($clienteData);
+
         return true;
     }
 
@@ -103,11 +74,11 @@ class AuthService
     }
 
     /**
-     * Verificar si hay sesión activa
+     * Verificar si hay sesión activa válida
      */
     public function check(): bool
     {
-        return $this->session->isValidForClient();
+        return $this->session->isValidSession();
     }
 
     /**
@@ -122,10 +93,26 @@ class AuthService
     }
 
     /**
-     * Obtener usuario actual
+     * Obtener datos del usuario/cliente actual
      */
     public function user(): ?array
     {
         return $this->session->getUser();
+    }
+
+    /**
+     * Obtener configuración del cliente actual
+     */
+    public function getClienteConfig(): ?array
+    {
+        return $this->session->getClienteConfig();
+    }
+
+    /**
+     * Obtener un valor específico de la config
+     */
+    public function getConfig(string $key, $default = null)
+    {
+        return $this->session->getConfigValue($key, $default);
     }
 }

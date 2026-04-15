@@ -1,6 +1,6 @@
 <?php
 /**
- * API para buscar imágenes de productos
+ * API para buscar imágenes de productos (Multi-tenant)
  *
  * GET /api/image-search.php?sku=XXX
  *
@@ -9,7 +9,9 @@
  * 2. Mercado Libre (por SKU, Part Number o nombre)
  */
 
-require_once __DIR__ . '/../config.php';
+header('Content-Type: application/json');
+
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/mercadolibre.php';
 
 // Solo permitir GET
@@ -19,15 +21,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit();
 }
 
-// Verificar API key o sesión
+// Requiere autenticación por sesión
+if (!isAuthenticated()) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'No autenticado']);
+    exit();
+}
+
+// Validar API Key
 $apiKey = $_GET['api_key'] ?? $_SERVER['HTTP_X_API_KEY'] ?? '';
-if ($apiKey !== API_KEY) {
-    // Verificar sesión si no hay API key
-    if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'error' => 'No autorizado']);
-        exit();
-    }
+$expectedKey = getClienteId() . '-sync-2024';
+if ($apiKey !== $expectedKey) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'API Key inválida']);
+    exit();
 }
 
 // Obtener parámetros

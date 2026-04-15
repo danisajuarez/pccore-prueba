@@ -1,41 +1,73 @@
 <?php
 /**
- * Login Multi-tenant
+ * Login Admin Productos - Multi-tenant
  *
- * Valida usuario contra BD Master (sige_two_terwoo)
- * usando TER_IdTercero (número) + TWO_Pass
+ * Valida usuario contra BD SIGE del cliente (sige_usu_usuario)
+ * Requiere que el cliente ya esté autenticado (login master previo)
  */
 
-// Cargar bootstrap
 require_once __DIR__ . '/../bootstrap.php';
 
-use App\Container;
-use App\Auth\AuthService;
+// Primero debe estar logueado como cliente
+if (!isAuthenticated()) {
+    header('Location: /api/login.php');
+    exit();
+}
 
-$auth = Container::get(AuthService::class);
+$clienteConfig = getClienteConfig();
+$clienteNombre = $clienteConfig['nombre'] ?? 'Sistema';
 $error = '';
 
-// Si ya está logueado, redirigir al index
-if (isAuthenticated()) {
-    header('Location: /index.php');
+// Si ya está logueado como admin, redirigir
+if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+    header('Location: /api/admin-productos.php');
     exit();
 }
 
 // Procesar login
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $clienteId = (int)($_POST['cliente_id'] ?? 0);
+    $usuario = trim($_POST['usuario'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if ($clienteId <= 0) {
-        $error = 'Ingresá un ID de cliente válido';
+    if (empty($usuario)) {
+        $error = 'Ingresá tu usuario';
     } elseif (empty($password)) {
         $error = 'Ingresá tu contraseña';
     } else {
-        if ($auth->login($clienteId, $password)) {
-            header('Location: /index.php');
-            exit();
-        } else {
-            $error = 'ID o contraseña incorrectos';
+        try {
+            $db = getSigeConnection();
+            $conn = $db->getConnection();
+
+            $stmt = $conn->prepare("
+                SELECT USU_IDUsuario, USU_LogUsu, USU_DatosUsu, USU_Habilitado
+                FROM sige_usu_usuario
+                WHERE USU_LogUsu = ? AND USU_PassWord = ?
+            ");
+
+            $stmt->bind_param('ss', $usuario, $password);
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            if ($row = $result->fetch_assoc()) {
+                if ($row['USU_Habilitado'] !== 'S') {
+                    $error = 'Usuario deshabilitado';
+                } else {
+                    // Login exitoso - guardar en sesión
+                    $_SESSION['admin_logged_in'] = true;
+                    $_SESSION['admin_user_id'] = $row['USU_IDUsuario'];
+                    $_SESSION['admin_user'] = $row['USU_LogUsu'];
+                    $_SESSION['admin_user_nombre'] = $row['USU_DatosUsu'];
+
+                    header('Location: /api/admin-productos.php');
+                    exit();
+                }
+            } else {
+                $error = 'Usuario o contraseña incorrectos';
+            }
+
+            $stmt->close();
+        } catch (Exception $e) {
+            $error = 'Error de conexión: ' . $e->getMessage();
         }
     }
 }
@@ -47,7 +79,7 @@ header('Content-Type: text/html; charset=utf-8');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Sistema de Sincronización</title>
+    <title>Admin Login - <?= htmlspecialchars($clienteNombre) ?></title>
     <style>
         * {
             margin: 0;
@@ -89,6 +121,16 @@ header('Content-Type: text/html; charset=utf-8');
         .logo span {
             font-size: 12px;
             color: #64748b;
+        }
+
+        .cliente-badge {
+            background: #334155;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #94a3b8;
+            display: inline-block;
+            margin-top: 10px;
         }
 
         .form-group {
@@ -157,13 +199,23 @@ header('Content-Type: text/html; charset=utf-8');
             font-size: 12px;
             color: #64748b;
         }
+
+        .help-text a {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+
+        .help-text a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
         <div class="logo">
-            <h1>Sistema de Sincronización</h1>
-            <span>Ingresá tus credenciales para continuar</span>
+            <h1>Admin Productos</h1>
+            <span>Ingresá tus credenciales de SIGE</span>
+            <div class="cliente-badge"><?= htmlspecialchars($clienteNombre) ?></div>
         </div>
 
         <?php if ($error): ?>
@@ -172,15 +224,14 @@ header('Content-Type: text/html; charset=utf-8');
 
         <form method="POST">
             <div class="form-group">
-                <label for="cliente_id">ID de Cliente</label>
-                <input type="number"
-                       id="cliente_id"
-                       name="cliente_id"
-                       placeholder="Ingresá tu número de cliente"
+                <label for="usuario">Usuario</label>
+                <input type="text"
+                       id="usuario"
+                       name="usuario"
+                       placeholder="Tu usuario de SIGE"
                        required
                        autofocus
-                       min="1"
-                       value="<?= htmlspecialchars($_POST['cliente_id'] ?? '') ?>">
+                       value="<?= htmlspecialchars($_POST['usuario'] ?? '') ?>">
             </div>
 
             <div class="form-group">
@@ -188,15 +239,15 @@ header('Content-Type: text/html; charset=utf-8');
                 <input type="password"
                        id="password"
                        name="password"
-                       placeholder="Ingresá tu contraseña"
+                       placeholder="Tu contraseña de SIGE"
                        required>
             </div>
 
-            <button type="submit">Iniciar Sesión</button>
+            <button type="submit">Ingresar</button>
         </form>
 
         <div class="help-text">
-            Contactá al administrador si no tenés acceso
+            <a href="/">Volver al Sincronizador</a>
         </div>
     </div>
 </body>

@@ -2,7 +2,6 @@
 
 namespace App\WooCommerce;
 
-use App\Config\AppConfig;
 use Exception;
 
 /**
@@ -10,12 +9,21 @@ use Exception;
  */
 class WooCommerceClient
 {
-    private AppConfig $config;
+    private string $baseUrl;
+    private string $consumerKey;
+    private string $consumerSecret;
     private int $timeout = 30;
 
-    public function __construct(AppConfig $config)
+    /**
+     * @param string $baseUrl URL base de la API WC (ej: https://tienda.com/wp-json/wc/v3)
+     * @param string $consumerKey Consumer Key de WooCommerce
+     * @param string $consumerSecret Consumer Secret de WooCommerce
+     */
+    public function __construct(string $baseUrl, string $consumerKey, string $consumerSecret)
     {
-        $this->config = $config;
+        $this->baseUrl = rtrim($baseUrl, '/');
+        $this->consumerKey = $consumerKey;
+        $this->consumerSecret = $consumerSecret;
     }
 
     /**
@@ -68,11 +76,11 @@ class WooCommerceClient
      */
     private function buildUrl(string $endpoint): string
     {
-        $url = rtrim($this->config->getWcUrl(), '/') . $endpoint;
+        $url = $this->baseUrl . $endpoint;
 
         $separator = strpos($url, '?') === false ? '?' : '&';
-        $url .= $separator . 'consumer_key=' . $this->config->getWcKey();
-        $url .= '&consumer_secret=' . $this->config->getWcSecret();
+        $url .= $separator . 'consumer_key=' . $this->consumerKey;
+        $url .= '&consumer_secret=' . $this->consumerSecret;
 
         return $url;
     }

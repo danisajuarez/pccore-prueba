@@ -1,13 +1,67 @@
 <?php
 /**
- * API: Publicar producto en WooCommerce
+ * API: Publicar producto en WooCommerce (Multi-tenant)
  *
  * Crea o actualiza un producto en WooCommerce desde SIGE
  */
 
-require_once __DIR__ . '/../config.php';
+header('Content-Type: application/json');
+
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/mercadolibre.php';
-checkAuth();
+
+// Requiere autenticación por sesión
+if (!isAuthenticated()) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'No autenticado']);
+    exit;
+}
+
+// Validar API Key
+$headers = getallheaders();
+$apiKey = $headers['X-Api-Key'] ?? $headers['x-api-key'] ?? $_GET['api_key'] ?? '';
+$expectedKey = getClienteId() . '-sync-2024';
+
+if ($apiKey !== $expectedKey) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'API Key inválida']);
+    exit;
+}
+
+// Función wcRequest
+function wcRequest($endpoint, $method = 'GET', $data = null) {
+    $url = WC_BASE_URL . $endpoint;
+    $url .= (strpos($url, '?') === false ? '?' : '&');
+    $url .= 'consumer_key=' . WC_CONSUMER_KEY . '&consumer_secret=' . WC_CONSUMER_SECRET;
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $method === 'GET' ? 30 : 120);
+
+    if ($method === 'PUT' || $method === 'POST') {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    }
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode >= 400) {
+        throw new Exception("WooCommerce API error: $httpCode - $response");
+    }
+
+    return json_decode($response, true);
+}
+
+// Función para obtener conexión a BD SIGE
+function getDbConnection() {
+    $dbService = getSigeConnection();
+    return $dbService->getConnection();
+}
 
 /**
  * Buscar o crear una categoría en WooCommerce

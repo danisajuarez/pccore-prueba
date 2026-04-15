@@ -1,15 +1,25 @@
 <?php
-require_once __DIR__ . '/../config.php';
+/**
+ * Administrar Productos - Multi-tenant
+ *
+ * Permite buscar, publicar y gestionar productos en WooCommerce.
+ */
+require_once __DIR__ . '/../bootstrap.php';
 
-// Esta página no usa checkAuth() porque es interfaz web
-// Pero las APIs que llama sí requieren API Key
+// Proteger página - requiere login
+requireAuth('/api/login.php');
+
+// Obtener datos del cliente para la API Key
+$clienteId = getClienteId();
+$clienteNombre = getClienteConfig()['nombre'] ?? 'Sistema';
+$API_KEY = $clienteId . '-sync-2024';
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Administrar Productos - PC Core</title>
+    <title>Administrar Productos - <?= htmlspecialchars($clienteNombre) ?></title>
     <style>
         * {
             box-sizing: border-box;
@@ -185,7 +195,7 @@ require_once __DIR__ . '/../config.php';
     </div>
 
     <script>
-        const API_KEY = 'pccore-sync-2024';
+        const API_KEY = '<?= $API_KEY ?>';
         const API_BASE = '/api';
 
         let productoActual = null;

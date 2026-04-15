@@ -13,29 +13,67 @@ set_time_limit(180);
 
 header('Content-Type: application/json');
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 define('BATCH_SIZE', 50);
 
-// Autenticación
+// Autenticación: requiere sesión activa
+if (!isAuthenticated()) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'No autenticado']);
+    exit;
+}
+
+// Validar API Key contra el cliente en sesión
 $keyFromUrl = $_GET['key'] ?? '';
-if ($keyFromUrl !== API_KEY) {
+$expectedKey = getClienteId() . '-sync-2024';
+if ($keyFromUrl !== $expectedKey) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'API Key invalida']);
     exit;
 }
 
-try {
-    // Usar servicios si están disponibles
-    if (class_exists('\App\Container') && \App\Container::isBooted()) {
-        $syncService = \App\Container::get(\App\Sige\SyncService::class);
-        $result = $syncService->syncBatch(BATCH_SIZE);
-        echo json_encode($result);
-        exit;
+// Función para request a WooCommerce (usa constantes del bootstrap)
+function wcRequest($endpoint, $method = 'GET', $data = null) {
+    $url = WC_BASE_URL . $endpoint;
+    $url .= (strpos($url, '?') === false ? '?' : '&');
+    $url .= 'consumer_key=' . WC_CONSUMER_KEY . '&consumer_secret=' . WC_CONSUMER_SECRET;
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
+    if ($method === 'PUT' || $method === 'POST') {
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    } else {
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     }
 
-    // Fallback al código original
-    $db = getDbConnection();
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($error) {
+        throw new Exception("CURL Error: $error");
+    }
+
+    if ($httpCode >= 400) {
+        throw new Exception("WooCommerce API error: $httpCode - $response");
+    }
+
+    return json_decode($response, true);
+}
+
+try {
+    // Conexión a BD SIGE del cliente
+    $dbService = getSigeConnection();
+    $db = $dbService->getConnection();
 
     // Contar pendientes
     $countSql = "SELECT COUNT(*) as total

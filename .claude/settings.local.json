@@ -37,7 +37,9 @@
       "Bash(git branch:*)",
       "Bash(php:*)",
       "Bash(xargs:*)",
-      "Bash(composer dump-autoload:*)"
+      "Bash(composer dump-autoload:*)",
+      "WebFetch(domain:pccoreprueba.antartidasige.com)",
+      "Bash(ls:*)"
     ]
   }
 }

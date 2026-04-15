@@ -1,30 +1,24 @@
 <?php
-// Sincronizador - No requiere login
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+/**
+ * Panel de Sincronización - Multi-tenant
+ *
+ * Requiere autenticación. Muestra el panel de sync
+ * con el nombre del cliente logueado.
+ */
 
-// Cargar configuración básica sin verificar sesión
-$autoloadPath = __DIR__ . '/vendor/autoload.php';
-if (file_exists($autoloadPath)) {
-    require_once $autoloadPath;
-    require_once __DIR__ . '/bootstrap.php';
-    $appConfig = \App\Container::get(\App\Config\AppConfig::class);
-    $CLIENTE_ID = $appConfig->getClienteId();
-} else {
-    // Fallback
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    if (preg_match('/^([a-zA-Z0-9-]+)\.antartidasige\.com$/', $host, $matches)) {
-        $CLIENTE_ID = strtolower($matches[1]);
-    } elseif (isset($_GET['cliente'])) {
-        $CLIENTE_ID = strtolower($_GET['cliente']);
-    } else {
-        $CLIENTE_ID = 'pccore';
-    }
-}
+// Cargar bootstrap (inicializa sesión y servicios)
+require_once __DIR__ . '/bootstrap.php';
 
-// API Key para el sincronizador
-$API_KEY = $CLIENTE_ID . '-sync-2024';
+// Proteger página - redirige a login si no está autenticado
+requireAuth('/api/login.php');
+
+// Obtener datos del cliente
+$clienteConfig = getClienteConfig();
+$clienteNombre = $clienteConfig['nombre'] ?? 'Sistema';
+$clienteId = getClienteId();
+
+// API Key para el sincronizador (basada en el ID del cliente)
+$API_KEY = $clienteId . '-sync-2024';
 
 header('Content-Type: text/html; charset=utf-8');
 ?>
@@ -33,7 +27,7 @@ header('Content-Type: text/html; charset=utf-8');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PC Core - Sync Panel</title>
+    <title><?= htmlspecialchars($clienteNombre) ?> - Sync Panel</title>
     <style>
         * {
             margin: 0;
@@ -67,6 +61,12 @@ header('Content-Type: text/html; charset=utf-8');
             font-size: 20px;
             font-weight: bold;
             color: #3b82f6;
+        }
+
+        .logo .subtitle {
+            font-size: 10px;
+            color: #64748b;
+            font-weight: normal;
         }
 
         .status {
@@ -115,33 +115,13 @@ header('Content-Type: text/html; charset=utf-8');
             border-color: #3b82f6;
         }
 
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin-bottom: 12px;
+        .nav-links a.logout {
+            background: #dc2626;
+            border-color: #dc2626;
         }
 
-        .card {
-            background: #1e293b;
-            border-radius: 8px;
-            padding: 12px 16px;
-            border: 1px solid #334155;
-        }
-
-        .card h2 {
-            font-size: 12px;
-            color: #94a3b8;
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .card-value {
-            font-size: 22px;
-            font-weight: bold;
-            color: #f8fafc;
+        .nav-links a.logout:hover {
+            background: #b91c1c;
         }
 
         .search-section {
@@ -175,14 +155,6 @@ header('Content-Type: text/html; charset=utf-8');
         button:disabled {
             background: #475569;
             cursor: not-allowed;
-        }
-
-        button.secondary {
-            background: #475569;
-        }
-
-        button.secondary:hover {
-            background: #64748b;
         }
 
         .main-grid {
@@ -251,11 +223,14 @@ header('Content-Type: text/html; charset=utf-8');
             margin-right: 8px;
         }
 
+        .user-info {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-right: 12px;
+        }
+
         @media (max-width: 768px) {
             .main-grid {
-                grid-template-columns: 1fr;
-            }
-            .cards {
                 grid-template-columns: 1fr;
             }
         }
@@ -265,11 +240,16 @@ header('Content-Type: text/html; charset=utf-8');
 
     <div class="container">
         <header>
-            <div class="logo"><?= htmlspecialchars(strtoupper($CLIENTE_ID)) ?> <span style="font-size: 10px; color: #64748b; font-weight: normal;">Sync Panel</span></div>
+            <div class="logo">
+                <?= htmlspecialchars($clienteNombre) ?>
+                <span class="subtitle">Sync Panel</span>
+            </div>
             <div style="display: flex; align-items: center; gap: 16px;">
+                <span class="user-info">ID: <?= htmlspecialchars($clienteId) ?></span>
                 <div class="nav-links">
                     <a href="/" class="active">Sincronizador</a>
-                    <a href="/api/login.php" target="_blank">Productos</a>
+                    <a href="/api/admin-productos.php" target="_blank">Productos</a>
+                    <a href="/api/logout.php" class="logout">Cerrar Sesión</a>
                 </div>
                 <div class="status" id="statusIndicator">
                     <div class="status-dot" id="statusDot"></div>
@@ -280,7 +260,7 @@ header('Content-Type: text/html; charset=utf-8');
 
         <div class="main-grid">
             <div class="search-section">
-                <h2>🔄 Sync Automática (BD → Woo)</h2>
+                <h2>Sync Automática (BD -> Woo)</h2>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <button onclick="runAutoSync()" id="autoSyncBtn">Sincronizar Ahora</button>
                     <span id="autoSyncStatus" style="color: #94a3b8; font-size: 12px;"></span>
@@ -301,38 +281,27 @@ header('Content-Type: text/html; charset=utf-8');
 
     <script>
         const API_KEY = '<?= $API_KEY ?>';
-        const SYNC_INTERVAL = 10 * 60 * 1000; // 10 minutos en ms
-                let countdown = 600; // 10 minutos en segundos
+        const SYNC_INTERVAL = 10 * 60 * 1000;
+        let countdown = 600;
         let countdownInterval;
         let syncInterval;
 
-        // Iniciar automáticamente
         window.onload = function() {
             checkHealth();
             startCountdown();
-            // Primera sync automática al cargar
             setTimeout(() => runAutoSync(), 2000);
-            // Sync cada 10 minutos
             syncInterval = setInterval(runAutoSync, SYNC_INTERVAL);
         };
 
-        // Countdown timer
         function startCountdown() {
             countdown = 600;
-            updateCountdownDisplay();
             if (countdownInterval) clearInterval(countdownInterval);
             countdownInterval = setInterval(() => {
                 countdown--;
                 if (countdown <= 0) countdown = 600;
-                updateCountdownDisplay();
             }, 1000);
         }
 
-        function updateCountdownDisplay() {
-            // Cards eliminadas - no hacer nada
-        }
-
-        // Auto sync desde base de datos - procesa lotes hasta terminar
         let syncRunning = false;
         let totalSynced = 0;
         let totalNotInWoo = 0;
@@ -350,7 +319,7 @@ header('Content-Type: text/html; charset=utf-8');
             totalNotInWoo = 0;
             totalFailed = 0;
 
-            addLog('🔄 Iniciando sincronización...', '');
+            addLog('Iniciando sincronización...', '');
 
             await processBatch(btn, status);
         }
@@ -364,54 +333,47 @@ header('Content-Type: text/html; charset=utf-8');
 
                 if (data.success) {
                     if (data.message) {
-                        // Sin cambios
-                        addLog(`✓ ${data.message}`, 'success');
+                        addLog(`OK: ${data.message}`, 'success');
                         status.textContent = data.message;
                         status.style.color = '#22c55e';
                         finishSync(btn, status);
                         return;
                     }
 
-                    // Acumular contadores
                     totalSynced += (data.successful || 0);
                     totalNotInWoo += (data.not_in_woo || 0);
                     totalFailed += (data.failed || 0);
                     const remaining = data.remaining || 0;
 
-                    // Log del lote
-                    addLog(`✓ Lote: ${data.successful || 0} OK, ${data.not_in_woo || 0} no en Woo | Pendientes: ${remaining}`, 'success');
+                    addLog(`Lote: ${data.successful || 0} OK, ${data.not_in_woo || 0} no en Woo | Pendientes: ${remaining}`, 'success');
 
-                    // Log detalles resumidos (solo primeros 5)
                     const detalles = data.details || [];
                     detalles.slice(0, 5).forEach(r => {
                         if (r.status === 'updated') {
-                            addLog(`  → ${r.sku}: $${r.price}`, 'success');
+                            addLog(`  -> ${r.sku}: $${r.price}`, 'success');
                         } else if (r.status === 'not_in_woo') {
-                            addLog(`  → ${r.sku}: no en Woo`, '');
+                            addLog(`  -> ${r.sku}: no en Woo`, '');
                         }
                     });
                     if (detalles.length > 5) {
                         addLog(`  ... y ${detalles.length - 5} más`, '');
                     }
 
-                    // Si quedan pendientes, continuar
                     if (remaining > 0) {
                         status.textContent = `Procesando... ${totalSynced} sincronizados, ${remaining} pendientes`;
-                        // Esperar 2 segundos entre lotes
                         await new Promise(r => setTimeout(r, 2000));
                         await processBatch(btn, status);
                     } else {
-                        // Terminado
                         finishSync(btn, status);
                     }
                 } else {
-                    addLog(`✗ Error: ${data.error}`, 'error');
+                    addLog(`Error: ${data.error}`, 'error');
                     status.textContent = data.error;
                     status.style.color = '#ef4444';
                     finishSync(btn, status);
                 }
             } catch (e) {
-                addLog(`✗ Error: ${e.message}`, 'error');
+                addLog(`Error: ${e.message}`, 'error');
                 status.textContent = e.message;
                 status.style.color = '#ef4444';
                 finishSync(btn, status);
@@ -426,14 +388,12 @@ header('Content-Type: text/html; charset=utf-8');
 
             if (totalSynced > 0 || totalNotInWoo > 0) {
                 const finalMsg = `Completado: ${totalSynced} sync, ${totalNotInWoo} no en Woo, ${totalFailed} errores`;
-                addLog(`🏁 ${finalMsg}`, 'success');
+                addLog(finalMsg, 'success');
                 status.textContent = finalMsg;
                 status.style.color = '#22c55e';
             }
         }
 
-
-        // Health check
         async function checkHealth() {
             try {
                 const res = await fetch('api/health.php');
@@ -451,7 +411,6 @@ header('Content-Type: text/html; charset=utf-8');
             }
         }
 
-        // Agregar log
         function addLog(message, type = '') {
             const container = document.getElementById('logsContainer');
             const time = new Date().toLocaleTimeString();
@@ -460,7 +419,6 @@ header('Content-Type: text/html; charset=utf-8');
             entry.innerHTML = `<span class="time">${time}</span>${message}`;
             container.insertBefore(entry, container.firstChild);
 
-            // Mantener solo últimos 50 logs
             while (container.children.length > 50) {
                 container.removeChild(container.lastChild);
             }

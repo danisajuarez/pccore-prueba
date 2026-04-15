@@ -1,21 +1,18 @@
 <?php
-session_start();
+/**
+ * Logout Multi-tenant
+ *
+ * Cierra la sesión usando el AuthService
+ * y redirige al login.
+ */
 
-// Limpiar todas las variables de sesión
-$_SESSION = array();
+require_once __DIR__ . '/../bootstrap.php';
 
-// Borrar la cookie de sesión
-if (ini_get("session.use_cookies")) {
-    $params = session_get_cookie_params();
-    setcookie(session_name(), '', time() - 42000,
-        $params["path"], $params["domain"],
-        $params["secure"], $params["httponly"]
-    );
-}
+use App\Container;
+use App\Auth\AuthService;
 
-// Destruir la sesión
-session_destroy();
+$auth = Container::get(AuthService::class);
+$auth->logout();
 
-// Redirigir al login
 header('Location: /api/login.php');
 exit();

@@ -1,7 +1,30 @@
 <?php
-// Cache bust: 2024-v2 - Botón ML eliminado, búsqueda automática
-require_once __DIR__ . '/../config.php';
-checkSession();
+/**
+ * Admin Productos - Multi-tenant
+ *
+ * Gestión completa de productos: búsqueda, publicación,
+ * actualización y sincronización con WooCommerce.
+ *
+ * Requiere doble autenticación:
+ * 1. Login cliente (Master DB) - ya hecho
+ * 2. Login usuario SIGE (sige_usu_usuario) - verificado aquí
+ */
+require_once __DIR__ . '/../bootstrap.php';
+
+// Primero: requiere login de cliente
+requireAuth('/api/login.php');
+
+// Segundo: requiere login de admin SIGE
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Location: /api/admin-login.php');
+    exit();
+}
+
+// Obtener datos del cliente y usuario
+$clienteConfig = getClienteConfig();
+$clienteNombre = $clienteConfig['nombre'] ?? 'Sistema';
+$clienteId = getClienteId();
+$userName = $_SESSION['admin_user_nombre'] ?? $_SESSION['admin_user'] ?? 'Usuario';
 
 header_remove('Content-Type');
 header('Content-Type: text/html; charset=utf-8');
@@ -11,7 +34,7 @@ header('Content-Type: text/html; charset=utf-8');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars(strtoupper($CLIENTE_ID)) ?> - Admin Productos</title>
+    <title><?= htmlspecialchars(strtoupper($clienteNombre)) ?> - Admin Productos</title>
     <style>
         * {
             margin: 0;
@@ -749,16 +772,16 @@ header('Content-Type: text/html; charset=utf-8');
 <body>
     <div class="container">
         <header>
-            <div class="logo"><?= htmlspecialchars(strtoupper($CLIENTE_ID)) ?> <span style="font-size: 10px; color: #64748b; font-weight: normal;">Admin Productos</span></div>
+            <div class="logo"><?= htmlspecialchars(strtoupper($clienteNombre)) ?> <span style="font-size: 10px; color: #64748b; font-weight: normal;">Admin Productos</span></div>
             <div style="display: flex; align-items: center; gap: 16px;">
                 <div class="nav-links">
                     <a href="/">Sincronizador</a>
                     <a href="/api/admin-productos.php" class="active">Productos</a>
-                    <a href="/api/logout.php" class="logout">Salir</a>
-                </div> 
+                    <a href="/api/admin-logout.php" class="logout">Salir</a>
+                </div>
                 <div class="status" id="statusIndicator">
                     <div class="status-dot" id="statusDot"></div>
-                    <span id="userNameText"><?= htmlspecialchars($_SESSION['user_nombre'] ?? $_SESSION['user']) ?></span>
+                    <span id="userNameText"><?= htmlspecialchars($userName) ?></span>
                 </div>
             </div>
         </header>
@@ -1024,7 +1047,7 @@ header('Content-Type: text/html; charset=utf-8');
     </div>
 
     <script>
-        const API_KEY = '<?= API_KEY ?>';
+        const API_KEY = '<?= $clienteId ?>-sync-2024';
         const API_BASE = '/api';
 
         let productoActual = null;
