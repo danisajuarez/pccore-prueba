@@ -5,7 +5,7 @@
 
 // Credenciales de Mercado Libre
 define('ML_APP_ID', '828139284413193');
-define('ML_CLIENT_SECRET', 'zkXFOW1IOODosHBEkeJmjBKLCzG9AFq2');
+define('ML_CLIENT_SECRET', 'Xeru5mcUpEtxFwoDeLjvAh2qsQYspzLP');
 define('ML_SITE', 'MLA'); // Argentina
 
 // Archivo para guardar el token

@@ -32,12 +32,22 @@ function getDbConnection() {
 }
 
 /**
- * Request a WooCommerce API (usa credenciales de sesión)
+ * Request a WooCommerce API - LEE DE SESIÓN
  */
 function wcRequest($endpoint, $method = 'GET', $data = null) {
-    $url = WC_BASE_URL . $endpoint;
+    if (!isset($_SESSION['cliente_config'])) {
+        throw new Exception("No hay sesión de cliente activa");
+    }
+
+    $config = $_SESSION['cliente_config'];
+
+    if (empty($config['wc_url']) || empty($config['wc_key']) || empty($config['wc_secret'])) {
+        throw new Exception("Credenciales de WooCommerce incompletas");
+    }
+
+    $url = $config['wc_url'] . $endpoint;
     $url .= (strpos($url, '?') === false ? '?' : '&');
-    $url .= 'consumer_key=' . WC_CONSUMER_KEY . '&consumer_secret=' . WC_CONSUMER_SECRET;
+    $url .= 'consumer_key=' . urlencode($config['wc_key']) . '&consumer_secret=' . urlencode($config['wc_secret']);
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -231,8 +241,8 @@ try {
         $response['woocommerce'] = null;
     }
 
-    $conn->close();
-    
+    // No cerrar $conn manualmente - el destructor de DatabaseService lo hace automáticamente
+
     // Asegurar que todos los datos están en UTF-8 válido antes de json_encode
     $response = sanitizeForJson($response);
     
@@ -249,6 +259,7 @@ try {
             'json_error_code' => json_last_error()
         ]);
     } else {
+        http_response_code(200);
         echo $json;
     }
 
