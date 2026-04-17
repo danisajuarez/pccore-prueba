@@ -2793,17 +2793,21 @@ header('Content-Type: text/html; charset=utf-8');
                 }
 
                 // Mostrar imágenes de ML
-                const ml = data.imagenes.mercadolibre;
+                const ml = data.imagenes?.mercadolibre;
                 if (ml && ml.imagenes && ml.imagenes.length > 0) {
                     imagenesML = ml.imagenes;
 
                     const mlInfo = document.getElementById('mlInfo');
                     if (mlInfo) {
-                        mlInfo.textContent = `Encontrado por: ${ml.encontrado_por} | Producto: ${ml.producto.nombre}`;
+                        const productoNombre = ml.producto?.nombre || 'Producto desconocido';
+                        mlInfo.textContent = `Encontrado por: ${ml.encontrado_por || 'ML'} | Producto: ${productoNombre}`;
                     }
 
                     const mlGrid = document.getElementById('mlImagesGrid');
-                    if (!mlGrid) return;
+                    if (!mlGrid) {
+                        console.warn('mlImagesGrid no encontrado');
+                        return;
+                    }
 
                     mlGrid.innerHTML = ml.imagenes.map((img, idx) => `
                         <div class="image-card ${esAlta ? 'selected' : ''}" data-idx="${idx}" onclick="toggleImageSelect(this)">
@@ -2837,7 +2841,7 @@ header('Content-Type: text/html; charset=utf-8');
                     if (esAlta) {
                         // Marcar todas
                         document.querySelectorAll('#mlImagesGrid .image-card').forEach(card => {
-                            card.classList.add('selected');
+                            if (card) card.classList.add('selected');
                         });
 
                         // Auto-activar checkbox de imágenes en ALTA
@@ -2848,14 +2852,14 @@ header('Content-Type: text/html; charset=utf-8');
                     } else {
                         // Desmarcar todas en modificación
                         document.querySelectorAll('#mlImagesGrid .image-card').forEach(card => {
-                            card.classList.remove('selected');
+                            if (card) card.classList.remove('selected');
                         });
                     }
                     updateImageCount();
 
                     addLog(`✓ Encontradas ${ml.imagenes.length} imágenes en ML`, 'success');
                 } else if (!data.woocommerce?.tiene_imagenes) {
-                    noMsg.style.display = 'block';
+                    if (noMsg) noMsg.style.display = 'block';
                 }
 
             } catch (error) {

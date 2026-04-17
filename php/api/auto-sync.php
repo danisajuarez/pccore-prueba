@@ -5,6 +5,10 @@
  * Procesa productos con cambios de precio/stock:
  * - Busca cada SKU en WooCommerce (individual)
  * - Actualiza TODOS juntos en un batch
+ *
+ * Soporta:
+ * - Llamadas con sesión activa (desde el navegador)
+ * - Llamadas desde cron (sin sesión, usa API key para identificar cliente)
  */
 
 error_reporting(0);
@@ -13,31 +17,128 @@ set_time_limit(180);
 
 header('Content-Type: application/json');
 
-require_once __DIR__ . '/../bootstrap.php';
+// Configuración Master DB (para cargar cliente sin sesión)
+require_once __DIR__ . '/../config/master.php';
 
 define('BATCH_SIZE', 50);
 
-// Autenticación: requiere sesión activa
-if (!isAuthenticated()) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'No autenticado']);
-    exit;
+// Variable global para la config del cliente (sesión o cargada por API key)
+$SYNC_CONFIG = null;
+
+/**
+ * Cargar configuración de cliente desde BD Master usando API key
+ */
+function loadClienteConfigFromKey($apiKey) {
+    // Extraer cliente_id de la key (formato: "clienteid-sync-2024")
+    if (!preg_match('/^(.+)-sync-2024$/', $apiKey, $matches)) {
+        return null;
+    }
+    $clienteId = $matches[1];
+
+    // Conectar a BD Master
+    $masterDb = new mysqli(MASTER_DB_HOST, MASTER_DB_USER, MASTER_DB_PASS, MASTER_DB_NAME, MASTER_DB_PORT);
+    if ($masterDb->connect_error) {
+        throw new Exception("Error conectando a BD Master: " . $masterDb->connect_error);
+    }
+    $masterDb->set_charset('utf8');
+
+    // Buscar cliente
+    $stmt = $masterDb->prepare("SELECT * FROM sige_two_terwoo WHERE TER_IdTercero = ?");
+    $stmt->bind_param("s", $clienteId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $clienteData = $result->fetch_assoc();
+    $stmt->close();
+    $masterDb->close();
+
+    if (!$clienteData) {
+        return null;
+    }
+
+    // Construir config igual que SessionManager
+    return [
+        'id' => $clienteData['TER_IdTercero'],
+        'nombre' => $clienteData['TER_RazonSocialTer'],
+        'db_host' => $clienteData['TWO_ServidorDBAnt'],
+        'db_user' => $clienteData['TWO_UserDBAnt'],
+        'db_pass' => $clienteData['TWO_PassDBAnt'],
+        'db_port' => (int)($clienteData['TWO_PuertoDBAnt'] ?? 3306),
+        'db_name' => $clienteData['TWO_NombreDBAnt'],
+        'wc_url' => $clienteData['TWO_WooUrl'] ?? null,
+        'wc_key' => $clienteData['TWO_WooKey'] ?? null,
+        'wc_secret' => $clienteData['TWO_WooSecret'] ?? null,
+        'lista_precio' => (int)($clienteData['TWO_ListaPrecio'] ?? 1),
+        'deposito' => $clienteData['TWO_Deposito'] ?? '1',
+    ];
 }
 
-// Validar API Key contra el cliente en sesión
+// ============================================================================
+// AUTENTICACIÓN: Soporta sesión O API key
+// ============================================================================
+
 $keyFromUrl = $_GET['key'] ?? '';
-$expectedKey = getClienteId() . '-sync-2024';
-if ($keyFromUrl !== $expectedKey) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'API Key invalida']);
+
+// Intentar cargar sesión primero
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_SESSION['cliente_config'])) {
+    // Tiene sesión activa
+    $SYNC_CONFIG = $_SESSION['cliente_config'];
+    $expectedKey = $SYNC_CONFIG['id'] . '-sync-2024';
+
+    if ($keyFromUrl !== $expectedKey) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'API Key invalida']);
+        exit;
+    }
+} else {
+    // Sin sesión - intentar cargar por API key (para cron)
+    if (empty($keyFromUrl)) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'API Key requerida']);
+        exit;
+    }
+
+    try {
+        $SYNC_CONFIG = loadClienteConfigFromKey($keyFromUrl);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+
+    if (!$SYNC_CONFIG) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Cliente no encontrado para esta API key']);
+        exit;
+    }
+}
+
+// Validar que tenemos config
+if (!$SYNC_CONFIG || empty($SYNC_CONFIG['wc_url'])) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Configuración de cliente incompleta']);
     exit;
 }
 
-// Función para request a WooCommerce (usa constantes del bootstrap)
+// Función para request a WooCommerce - USA $SYNC_CONFIG
 function wcRequest($endpoint, $method = 'GET', $data = null) {
-    $url = WC_BASE_URL . $endpoint;
+    global $SYNC_CONFIG;
+
+    if (!$SYNC_CONFIG) {
+        throw new Exception("No hay configuración de cliente cargada");
+    }
+
+    // Validar que tenemos credenciales de WooCommerce
+    if (empty($SYNC_CONFIG['wc_url']) || empty($SYNC_CONFIG['wc_key']) || empty($SYNC_CONFIG['wc_secret'])) {
+        throw new Exception("Credenciales de WooCommerce incompletas");
+    }
+
+    $url = $SYNC_CONFIG['wc_url'] . $endpoint;
     $url .= (strpos($url, '?') === false ? '?' : '&');
-    $url .= 'consumer_key=' . WC_CONSUMER_KEY . '&consumer_secret=' . WC_CONSUMER_SECRET;
+    $url .= 'consumer_key=' . urlencode($SYNC_CONFIG['wc_key']) . '&consumer_secret=' . urlencode($SYNC_CONFIG['wc_secret']);
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -71,9 +172,19 @@ function wcRequest($endpoint, $method = 'GET', $data = null) {
 }
 
 try {
-    // Conexión a BD SIGE del cliente
-    $dbService = getSigeConnection();
-    $db = $dbService->getConnection();
+    // Conexión a BD SIGE del cliente (usando $SYNC_CONFIG)
+    $db = new mysqli(
+        $SYNC_CONFIG['db_host'],
+        $SYNC_CONFIG['db_user'],
+        $SYNC_CONFIG['db_pass'],
+        $SYNC_CONFIG['db_name'],
+        $SYNC_CONFIG['db_port']
+    );
+
+    if ($db->connect_error) {
+        throw new Exception("Error conectando a BD SIGE: " . $db->connect_error);
+    }
+    $db->set_charset('utf8');
 
     // Contar pendientes
     $countSql = "SELECT COUNT(*) as total

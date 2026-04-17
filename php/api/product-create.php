@@ -6,7 +6,12 @@
  * 2. Formato nuevo (desde ML): nombre, precio, stock, imagenes[]
  */
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
+
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No autenticado']));
+}
 checkAuth();
 
 // Solo POST
@@ -148,6 +153,25 @@ if (!empty($input['atributos'])) {
 
 try {
     $response = wcRequest('/products', 'POST', $productData);
+
+    // ========================================
+    // MARCAR COMO PUBLICADO EN SIGE (art_articuloweb = 'S')
+    // ========================================
+    if (!empty($response['id'])) {
+        try {
+            $dbService = getSigeConnection();
+            $db = $dbService->getConnection();
+            $sku = trim($input['sku']);
+            $sqlUpdate = "UPDATE sige_art_articulo SET art_articuloweb = 'S' WHERE TRIM(ART_IDArticulo) = ?";
+            $stmtUpdate = $db->prepare($sqlUpdate);
+            $stmtUpdate->bind_param("s", $sku);
+            $stmtUpdate->execute();
+            $stmtUpdate->close();
+        } catch (Exception $e) {
+            // Log error pero no fallar la respuesta - el producto ya se publicó
+            error_log("Error actualizando art_articuloweb para SKU {$input['sku']}: " . $e->getMessage());
+        }
+    }
 
     echo json_encode([
         'success' => true,

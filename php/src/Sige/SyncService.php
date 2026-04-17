@@ -154,10 +154,12 @@ class SyncService
      * Publicar un producto en WooCommerce
      *
      * @param string $sku
+     * @param array $images Imágenes opcionales [{src: url}, ...]
+     * @param string|null $descripcionML Descripción de ML opcional
      * @return array Resultado de la publicación
      * @throws Exception
      */
-    public function publishProduct(string $sku): array
+    public function publishProduct(string $sku, array $images = [], ?string $descripcionML = null): array
     {
         $sku = trim($sku);
         $producto = $this->repository->findBySku($sku);
@@ -171,12 +173,58 @@ class SyncService
             throw new Exception('El producto no tiene nombre');
         }
 
-        if (empty($producto['precio_final']) || $producto['precio_final'] <= 0) {
+        if (empty($producto['precio']) || $producto['precio'] <= 0) {
             throw new Exception('El producto no tiene precio válido');
+        }
+
+        // Si no hay descripción en SIGE, usar la de ML
+        if (empty($producto['descripcion_larga']) && !empty($descripcionML)) {
+            $producto['descripcion_larga'] = trim($descripcionML);
         }
 
         // Preparar datos para WooCommerce
         $productData = $this->mapper->toWooCommerce($producto, $producto['atributos'] ?? []);
+
+        // Agregar marca como atributo si existe
+        if (!empty($producto['marca'])) {
+            if (!isset($productData['attributes'])) {
+                $productData['attributes'] = [];
+            }
+            // Agregar al inicio del array para que aparezca primero
+            array_unshift($productData['attributes'], [
+                'name' => 'Marca',
+                'options' => [trim($producto['marca'])],
+                'visible' => true,
+                'variation' => false
+            ]);
+        }
+
+        // Agregar imágenes si vienen
+        if (!empty($images)) {
+            $productData['images'] = $images;
+        }
+
+        // Procesar categorías (supracategoría -> categoría)
+        $categoryIds = [];
+        $supracategoriaId = null;
+
+        if (!empty($producto['supracategoria'])) {
+            $supracategoriaId = $this->wcClient->findOrCreateCategory($producto['supracategoria'], 0);
+        }
+
+        if (!empty($producto['categoria'])) {
+            $parentId = $supracategoriaId ?? 0;
+            $categoriaId = $this->wcClient->findOrCreateCategory($producto['categoria'], $parentId);
+            if ($categoriaId) {
+                $categoryIds[] = ['id' => $categoriaId];
+            }
+        } elseif ($supracategoriaId) {
+            $categoryIds[] = ['id' => $supracategoriaId];
+        }
+
+        if (!empty($categoryIds)) {
+            $productData['categories'] = $categoryIds;
+        }
 
         // Verificar si ya existe en WooCommerce
         $existingProduct = $this->wcClient->findBySku($sku);
@@ -189,6 +237,21 @@ class SyncService
             // Crear nuevo producto
             $response = $this->wcClient->createProduct($productData);
             $mensaje = 'Producto creado en WooCommerce';
+        }
+
+        // Marcar como publicado en SIGE (art_articuloweb = 'S')
+        if (!empty($response['id'])) {
+            try {
+                $conn = $this->db->getConnection();
+                $sqlUpdate = "UPDATE sige_art_articulo SET art_articuloweb = 'S' WHERE TRIM(ART_IDArticulo) = ?";
+                $stmtUpdate = $conn->prepare($sqlUpdate);
+                $stmtUpdate->bind_param("s", $sku);
+                $stmtUpdate->execute();
+                $stmtUpdate->close();
+            } catch (Exception $e) {
+                // Log error pero no fallar - el producto ya se publicó
+                error_log("Error actualizando art_articuloweb para SKU $sku: " . $e->getMessage());
+            }
         }
 
         return [
@@ -234,7 +297,7 @@ class SyncService
         }
 
         $updateData = [
-            'regular_price' => number_format((float) $producto['precio_final'], 2, '.', ''),
+            'regular_price' => number_format((float) $producto['precio'], 2, '.', ''),
             'stock_quantity' => (int) $producto['stock']
         ];
 

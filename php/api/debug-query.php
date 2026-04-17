@@ -3,36 +3,22 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 header('Content-Type: application/json; charset=utf-8');
 
-// Conexión directa sin pasar por config.php
-$clienteId = 'pccore';
-$configFile = __DIR__ . '/../config/' . $clienteId . '.txt';
+// REQUERIMIENTO OBLIGATORIO: Sesión activa (sin fallback a archivos .txt)
+require_once __DIR__ . '/../bootstrap.php';
 
-if (!file_exists($configFile)) {
-    die(json_encode(['error' => 'Config no encontrado']));
+// Verificar que hay sesión de cliente activa
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No hay sesión de cliente activa. Debe iniciar sesión primero.']));
 }
 
-$lines = file($configFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-$config = [];
-foreach ($lines as $line) {
-    if (strpos($line, '=') !== false) {
-        list($key, $value) = explode('=', $line, 2);
-        $config[trim($key)] = trim($value);
-    }
+// Obtener conexión desde DatabaseService (credenciales de sesión)
+try {
+    $db = getSigeConnection()->getConnection();
+} catch (Exception $e) {
+    http_response_code(500);
+    die(json_encode(['error' => 'No se pudo conectar a la BD: ' . $e->getMessage()]));
 }
-
-$db = new mysqli(
-    $config['db_host'] ?? 'localhost',
-    $config['db_user'],
-    $config['db_pass'],
-    $config['db_name'],
-    $config['db_port'] ?? 3306
-);
-
-if ($db->connect_error) {
-    die(json_encode(['error' => 'DB: ' . $db->connect_error]));
-}
-
-$db->set_charset('utf8');
 
 $sku = $_GET['sku'] ?? 'TL-WA701ND';
 

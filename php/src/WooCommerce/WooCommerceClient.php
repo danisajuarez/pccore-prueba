@@ -18,9 +18,15 @@ class WooCommerceClient
      * @param string $baseUrl URL base de la API WC (ej: https://tienda.com/wp-json/wc/v3)
      * @param string $consumerKey Consumer Key de WooCommerce
      * @param string $consumerSecret Consumer Secret de WooCommerce
+     * @throws Exception si alguna credencial está vacía
      */
     public function __construct(string $baseUrl, string $consumerKey, string $consumerSecret)
     {
+        // Validar que todas las credenciales son válidas
+        if (empty($baseUrl) || empty($consumerKey) || empty($consumerSecret)) {
+            throw new Exception("Credenciales de WooCommerce incompletas (URL, Key o Secret vacíos)");
+        }
+        
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->consumerKey = $consumerKey;
         $this->consumerSecret = $consumerSecret;
@@ -174,5 +180,40 @@ class WooCommerceClient
     {
         $this->timeout = $seconds;
         return $this;
+    }
+
+    /**
+     * Buscar o crear una categoría en WooCommerce
+     * @param string $nombre Nombre de la categoría
+     * @param int $parentId ID de la categoría padre (0 = raíz)
+     * @return int|null ID de la categoría
+     */
+    public function findOrCreateCategory(string $nombre, int $parentId = 0): ?int
+    {
+        if (empty($nombre)) return null;
+
+        $nombre = trim($nombre);
+
+        // Buscar categoría existente
+        $categorias = $this->request('/products/categories?search=' . urlencode($nombre) . '&per_page=100');
+
+        foreach ($categorias as $cat) {
+            // Coincidencia exacta (case-insensitive) y mismo padre
+            if (strcasecmp($cat['name'], $nombre) === 0 && $cat['parent'] == $parentId) {
+                return $cat['id'];
+            }
+        }
+
+        // Si no existe, crear
+        try {
+            $newCat = $this->request('/products/categories', 'POST', [
+                'name' => $nombre,
+                'parent' => $parentId
+            ]);
+            return $newCat['id'] ?? null;
+        } catch (\Exception $e) {
+            error_log("Error creando categoría '$nombre': " . $e->getMessage());
+            return null;
+        }
     }
 }

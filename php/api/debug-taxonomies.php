@@ -3,7 +3,12 @@
  * Debug: Ver qué taxonomías tiene WooCommerce
  */
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
+
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No autenticado']));
+}
 
 header('Content-Type: text/html; charset=utf-8');
 

@@ -5,7 +5,12 @@
  * Busca datos faltantes en ML y actualiza en WooCommerce
  */
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
+
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No autenticado']));
+}
 require_once __DIR__ . '/../config/mercadolibre.php';
 checkAuth();
 

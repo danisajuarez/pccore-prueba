@@ -3,7 +3,13 @@
  * Página de Nuevo Producto - Buscar en ML y crear en WooCommerce
  */
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
+
+// Requerir autenticación
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No autenticado']));
+}
 checkSession();
 
 // Cambiar headers para HTML

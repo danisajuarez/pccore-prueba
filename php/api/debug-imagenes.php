@@ -7,7 +7,12 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
+
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No autenticado']));
+}
 require_once __DIR__ . '/../config/mercadolibre.php';
 
 $sku = $_GET['sku'] ?? '';

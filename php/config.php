@@ -13,27 +13,41 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-// Cargar autoloader si existe (después de composer install)
-$autoloadPath = __DIR__ . '/vendor/autoload.php';
-if (file_exists($autoloadPath)) {
-    require_once $autoloadPath;
-    require_once __DIR__ . '/bootstrap.php';
+// Cargar bootstrap (REQUERIDO - no hay fallback a archivos)
+require_once __DIR__ . '/bootstrap.php';
 
-    // Usar servicios del container
+// Usar servicios del container
+try {
     $appConfig = \App\Container::get(\App\Config\AppConfig::class);
     $CLIENTE_ID = $appConfig->getClienteId();
     $CONFIG = $appConfig->all();
-} else {
-    // Fallback al código original si no hay autoloader
-    $CLIENTE_ID = getClienteId();
-    $CONFIG = loadClientConfig($CLIENTE_ID);
+    
+    // Validar que tenemos credenciales de WooCommerce
+    if (empty($CONFIG['wc_url']) || empty($CONFIG['wc_key']) || empty($CONFIG['wc_secret'])) {
+        http_response_code(400);
+        die(json_encode([
+            'error' => 'Configuración de WooCommerce incompleta para este cliente.',
+            'missing' => [
+                'wc_url' => empty($CONFIG['wc_url']) ? 'requerido' : 'ok',
+                'wc_key' => empty($CONFIG['wc_key']) ? 'requerido' : 'ok',
+                'wc_secret' => empty($CONFIG['wc_secret']) ? 'requerido' : 'ok'
+            ]
+        ]));
+    }
+} catch (Exception $e) {
+    // Si no hay sesión, AppConfig lanza excepción (comportamiento esperado)
+    http_response_code(401);
+    die(json_encode([
+        'error' => 'No hay sesión de cliente activa. Debe iniciar sesión primero.',
+        'details' => $e->getMessage()
+    ]));
 }
 
-// Definir constantes para compatibilidad
+// Definir constantes para compatibilidad (ahora son garantizadas como válidas)
 if (!defined('WC_BASE_URL')) {
-    define('WC_BASE_URL', $CONFIG['wc_url'] ?? '');
-    define('WC_CONSUMER_KEY', $CONFIG['wc_key'] ?? '');
-    define('WC_CONSUMER_SECRET', $CONFIG['wc_secret'] ?? '');
+    define('WC_BASE_URL', $CONFIG['wc_url']);
+    define('WC_CONSUMER_KEY', $CONFIG['wc_key']);
+    define('WC_CONSUMER_SECRET', $CONFIG['wc_secret']);
 
     define('DB_HOST', $CONFIG['db_host'] ?? 'localhost');
     define('DB_PORT', intval($CONFIG['db_port'] ?? 3306));
@@ -68,56 +82,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // ============================================================================
 
 /**
- * Detectar cliente desde el subdominio
- *
- * @deprecated Usar App\Config\AppConfig::getClienteId()
+ * DEPRECATED - Ya no existe fallback sin sesión
+ * Usar App\Config\AppConfig::getClienteId() a través del Container
+ * 
+ * Esta función existía para compatibilidad legacy pero el sistema
+ * ahora REQUIERE sesión activa. No hay fallback a archivos de configuración.
  */
-function getClienteId() {
-    // Verificar si el container está disponible
-    if (class_exists('\App\Container') && \App\Container::isBooted()) {
-        return \App\Container::get(\App\Config\AppConfig::class)->getClienteId();
-    }
-
-    // Fallback al código original
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-
-    if (preg_match('/^([a-zA-Z0-9-]+)\.antartidasige\.com$/', $host, $matches)) {
-        return strtolower($matches[1]);
-    }
-
-    if (isset($_GET['cliente'])) {
-        return strtolower($_GET['cliente']);
-    }
-
-    return 'portalgcom';
-}
 
 /**
- * Cargar configuración del cliente desde archivo .txt
- *
- * @deprecated Usar App\Config\AppConfig
+ * DEPRECATED - Ya no existen archivos .txt de configuración
+ * La configuración se carga exclusivamente desde $_SESSION['cliente_config']
+ * 
+ * No hay fallback a archivos locales. El sistema falla si no hay sesión activa.
  */
-function loadClientConfig($clienteId) {
-    $configFile = __DIR__ . '/config/' . $clienteId . '.txt';
-
-    if (!file_exists($configFile)) {
-        throw new Exception("Cliente '$clienteId' no encontrado");
-    }
-
-    $config = [];
-    $lines = file($configFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-
-    foreach ($lines as $line) {
-        if (strpos(trim($line), ';') === 0) continue;
-
-        if (strpos($line, '=') !== false) {
-            list($key, $value) = explode('=', $line, 2);
-            $config[trim($key)] = trim($value);
-        }
-    }
-
-    return $config;
-}
 
 /**
  * Obtener conexión a la base de datos

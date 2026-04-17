@@ -52,39 +52,6 @@ class SessionManager
         $_SESSION['cliente_id'] = $clienteData['TER_IdTercero'];
         $_SESSION['cliente_nombre'] = $clienteData['TER_RazonSocialTer'];
 
-        // Credenciales WC desde BD o fallback desde archivo config
-        $wcUrl = $clienteData['TWO_WooUrl'] ?? null;
-        $wcKey = $clienteData['TWO_WooKey'] ?? null;
-        $wcSecret = $clienteData['TWO_WooSecret'] ?? null;
-        
-        // Lista de precios y depósito - defaults de BD
-        $listaPrecio = (int)($clienteData['TWO_ListaPrecio'] ?? 1);
-        $deposito = (int)($clienteData['TWO_Deposito'] ?? 1);
-
-        // SIEMPRE cargar el archivo de configuración del cliente
-        // Este es la FUENTE DE VERDAD en prueba
-        $configFile = $this->findConfigFile($clienteData['TER_RazonSocialTer']);
-        $fileConfig = null;
-        
-        if ($configFile) {
-            $fileConfig = $this->loadConfigFile($configFile);
-            
-            // Usar valores del archivo si está disponible (fallback a BD defaults si no)
-            if (isset($fileConfig['lista_precio'])) {
-                $listaPrecio = (int)$fileConfig['lista_precio'];
-            }
-            if (isset($fileConfig['deposito'])) {
-                $deposito = (int)$fileConfig['deposito'];
-            }
-            
-            // WC credentials: usar BD si existe, sino archivo
-            if (empty($wcUrl)) {
-                $wcUrl = $fileConfig['wc_url'] ?? null;
-                $wcKey = $fileConfig['wc_key'] ?? null;
-                $wcSecret = $fileConfig['wc_secret'] ?? null;
-            }
-        }
-
         // Guardar toda la configuración del cliente para conexiones dinámicas
         $_SESSION['cliente_config'] = [
             // Datos del cliente
@@ -105,14 +72,14 @@ class SessionManager
             'woo_db_port' => (int)($clienteData['TWO_PuertoDBWoo'] ?? 3306),
             'woo_db_name' => $clienteData['TWO_NombreDBWoo'] ?? null,
 
-            // Credenciales API WooCommerce
-            'wc_url' => $wcUrl,
-            'wc_key' => $wcKey,
-            'wc_secret' => $wcSecret,
+            // Credenciales API WooCommerce (desde BD)
+            'wc_url' => $clienteData['TWO_WooUrl'] ?? null,
+            'wc_key' => $clienteData['TWO_WooKey'] ?? null,
+            'wc_secret' => $clienteData['TWO_WooSecret'] ?? null,
 
-            // Configuración SIGE - Lee del archivo .txt (fuente de verdad en prueba)
-            'lista_precio' => $listaPrecio,
-            'deposito' => $deposito,
+            // Configuración SIGE (desde BD)
+            'lista_precio' => (int)($clienteData['TWO_ListaPrecio'] ?? 1),
+            'deposito' => $clienteData['TWO_Deposito'] ?? '1',
 
             // Flags
             'sincronizar_auto' => ($clienteData['TWO_SincronizarAut'] ?? 'N') === 'S',
@@ -122,58 +89,6 @@ class SessionManager
         $_SESSION['user'] = $clienteData['TER_IdTercero'];
         $_SESSION['user_id'] = $clienteData['TER_IdTercero'];
         $_SESSION['user_nombre'] = $clienteData['TER_RazonSocialTer'];
-    }
-
-    /**
-     * Buscar archivo de configuración basado en el nombre del cliente
-     */
-    private function findConfigFile(string $clienteName): ?string
-    {
-        $configDir = dirname(__DIR__, 2) . '/config/';
-
-        // Normalizar nombre: quitar espacios, lowercase, sin acentos
-        $slug = strtolower(trim($clienteName));
-        $slug = preg_replace('/[^a-z0-9]/', '', $slug);
-
-        // Buscar archivo exacto
-        $file = $configDir . $slug . '.txt';
-        if (file_exists($file)) {
-            return $file;
-        }
-
-        // Buscar parcial (ej: "Digital Pergamino" -> "digitalpergamino.txt")
-        $files = glob($configDir . '*.txt');
-        foreach ($files as $f) {
-            $basename = strtolower(basename($f, '.txt'));
-            if (strpos($slug, $basename) !== false || strpos($basename, $slug) !== false) {
-                return $f;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Cargar configuración desde archivo .txt
-     */
-    private function loadConfigFile(string $path): array
-    {
-        $config = [];
-        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (empty($line) || $line[0] === ';') {
-                continue;
-            }
-
-            if (strpos($line, '=') !== false) {
-                list($key, $value) = explode('=', $line, 2);
-                $config[trim($key)] = trim($value);
-            }
-        }
-
-        return $config;
     }
 
     /**

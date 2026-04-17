@@ -3,9 +3,13 @@
  * Debug: Probar búsqueda de producto en ML
  */
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/mercadolibre.php';
-checkAuth();
+
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No autenticado']));
+}
 
 $sku = trim($_GET['sku'] ?? 'AT902');
 

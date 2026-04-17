@@ -2,33 +2,22 @@
 /**
  * Panel de Administración de Imágenes
  * Busca imágenes en ML y las sube a WooCommerce
+ * 
+ * REQUERIMIENTO: Sesión activa (no hay detección de cliente sin sesión)
  */
-session_start();
 
-// Cargar configuración sin headers JSON
-$_SERVER['REQUEST_METHOD'] = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+// Cargar configuración y bootstrap (REQUERIDO)
+require_once __DIR__ . '/../bootstrap.php';
 
-// Detectar cliente
-function getClienteId() {
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    if (preg_match('/^([a-zA-Z0-9-]+)\.antartidasige\.com$/', $host, $matches)) {
-        return strtolower($matches[1]);
-    }
-    if (isset($_GET['cliente'])) {
-        return strtolower($_GET['cliente']);
-    }
-    return 'pccore';
-}
-
-$CLIENTE_ID = getClienteId();
-
-// Verificar sesión
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+// Verificar que hay sesión de cliente activa
+// (bootstrap.php ya lo verifica pero aquí lo dejamos explícito para claridad)
+if (!isAuthenticated()) {
     header('Location: /api/login.php');
     exit();
 }
 
-// API Key para las llamadas
+// Obtener cliente desde sesión (no hay fallback a subdominio/parámetro)
+$CLIENTE_ID = getClienteId();
 $API_KEY = $CLIENTE_ID . '-sync-2024';
 ?>
 <!DOCTYPE html>

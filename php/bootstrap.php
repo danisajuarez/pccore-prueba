@@ -107,15 +107,23 @@ if ($CLIENTE_AUTENTICADO) {
         return new DatabaseService();
     });
 
-    // WooCommerceClient - Si tiene credenciales configuradas
+    // WooCommerceClient - Solo si tiene credenciales configuradas
     if (class_exists('App\WooCommerce\WooCommerceClient')) {
-        Container::register(\App\WooCommerce\WooCommerceClient::class, function () use ($CLIENTE_CONFIG) {
-            return new \App\WooCommerce\WooCommerceClient(
-                $CLIENTE_CONFIG['wc_url'] ?? '',
-                $CLIENTE_CONFIG['wc_key'] ?? '',
-                $CLIENTE_CONFIG['wc_secret'] ?? ''
-            );
-        });
+        // Validar que tenemos TODAS las credenciales de WooCommerce antes de registrar
+        if (!empty($CLIENTE_CONFIG['wc_url']) && !empty($CLIENTE_CONFIG['wc_key']) && !empty($CLIENTE_CONFIG['wc_secret'])) {
+            Container::register(\App\WooCommerce\WooCommerceClient::class, function () use ($CLIENTE_CONFIG) {
+                return new \App\WooCommerce\WooCommerceClient(
+                    $CLIENTE_CONFIG['wc_url'],
+                    $CLIENTE_CONFIG['wc_key'],
+                    $CLIENTE_CONFIG['wc_secret']
+                );
+            });
+        } else {
+            // Si faltan credenciales, registrar un placeholder que lance error si se usa
+            Container::register(\App\WooCommerce\WooCommerceClient::class, function () {
+                throw new Exception("Credenciales de WooCommerce incompletas para este cliente");
+            });
+        }
     }
 
     // ProductMapper
@@ -252,10 +260,19 @@ if ($CLIENTE_AUTENTICADO) {
         define('SIGE_DEPOSITO', $CLIENTE_CONFIG['deposito'] ?? 1);
     }
 
-    // WooCommerce (cuando se agreguen a la tabla)
+    // WooCommerce (solo si está completa la configuración)
     if (!defined('WC_BASE_URL')) {
-        define('WC_BASE_URL', $CLIENTE_CONFIG['wc_url'] ?? '');
-        define('WC_CONSUMER_KEY', $CLIENTE_CONFIG['wc_key'] ?? '');
-        define('WC_CONSUMER_SECRET', $CLIENTE_CONFIG['wc_secret'] ?? '');
+        // Validar que tenemos TODAS las credenciales antes de definir
+        if (!empty($CLIENTE_CONFIG['wc_url']) && !empty($CLIENTE_CONFIG['wc_key']) && !empty($CLIENTE_CONFIG['wc_secret'])) {
+            define('WC_BASE_URL', $CLIENTE_CONFIG['wc_url']);
+            define('WC_CONSUMER_KEY', $CLIENTE_CONFIG['wc_key']);
+            define('WC_CONSUMER_SECRET', $CLIENTE_CONFIG['wc_secret']);
+        } else {
+            // Si faltan credenciales, definir valores especiales que causarán error si se usan
+            define('WC_BASE_URL', '');
+            define('WC_CONSUMER_KEY', '');
+            define('WC_CONSUMER_SECRET', '');
+            error_log("WARN: Credenciales de WooCommerce incompletas para cliente {$CLIENTE_ID}");
+        }
     }
 }

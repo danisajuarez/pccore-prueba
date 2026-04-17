@@ -5,81 +5,59 @@ namespace App\Config;
 use Exception;
 
 /**
- * Gestiona la configuración del cliente basada en subdominios
+ * Gestiona la configuración del cliente (Multi-tenant)
+ *
+ * Lee toda la configuración desde la sesión del cliente.
+ * Los datos vienen de la tabla sige_two_terwoo en la BD Master.
  */
 class AppConfig
 {
     private string $clienteId;
     private array $config = [];
-    private string $configPath;
 
-    public function __construct(?string $clienteId = null, ?string $configPath = null)
+    public function __construct()
     {
-        $this->configPath = $configPath ?? dirname(__DIR__, 2) . '/config';
-        $this->clienteId = $clienteId ?? $this->detectClienteId();
-        $this->loadConfig();
+        $this->loadConfigFromSession();
     }
 
     /**
-     * Detectar el ID del cliente desde el subdominio o dominio
+     * Cargar configuración desde la sesión del cliente
      */
-    private function detectClienteId(): string
+    private function loadConfigFromSession(): void
     {
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-
-        // Si es subdominio.antartidasige.com, extraer subdominio
-        if (preg_match('/^([a-zA-Z0-9-]+)\.antartidasige\.com$/', $host, $matches)) {
-            return strtolower($matches[1]);
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
         }
 
-        // Mapeo de dominios personalizados a clientes
-        $dominiosClientes = [
-            'digitalpergamino.com.ar' => 'digitalpergamino',
-            'dev.digitalpergamino.com.ar' => 'digitalpergamino',
-            'www.digitalpergamino.com.ar' => 'digitalpergamino',
-            'pccore.com.ar' => 'pccore',
-            'www.pccore.com.ar' => 'pccore',
+        if (!isset($_SESSION['cliente_config'])) {
+            throw new Exception("No hay sesión de cliente activa. Debe iniciar sesión primero.");
+        }
+
+        $sessionConfig = $_SESSION['cliente_config'];
+
+        // Guardar ID del cliente
+        $this->clienteId = (string)($sessionConfig['id'] ?? '');
+
+        // Mapear config de sesión a formato esperado por AppConfig
+        $this->config = [
+            // WooCommerce API
+            'wc_url' => $sessionConfig['wc_url'] ?? '',
+            'wc_key' => $sessionConfig['wc_key'] ?? '',
+            'wc_secret' => $sessionConfig['wc_secret'] ?? '',
+
+            // Base de datos WooCommerce
+            'db_host' => $sessionConfig['woo_db_host'] ?? '',
+            'db_port' => $sessionConfig['woo_db_port'] ?? 3306,
+            'db_user' => $sessionConfig['woo_db_user'] ?? '',
+            'db_pass' => $sessionConfig['woo_db_pass'] ?? '',
+            'db_name' => $sessionConfig['woo_db_name'] ?? '',
+
+            // Configuración SIGE
+            'lista_precio' => $sessionConfig['lista_precio'] ?? 1,
+            'deposito' => $sessionConfig['deposito'] ?? '1',
+
+            // No hay admin_user/admin_pass - el login es por cliente
         ];
-
-        // Verificar si el host coincide con algún dominio mapeado
-        if (isset($dominiosClientes[$host])) {
-            return $dominiosClientes[$host];
-        }
-
-        // Para desarrollo local o acceso directo, usar parámetro o default
-        if (isset($_GET['cliente'])) {
-            return strtolower($_GET['cliente']);
-        }
-
-        // Default para desarrollo
-        return 'portalgcom';
-    }
-
-    /**
-     * Cargar configuración desde archivo .txt del cliente
-     */
-    private function loadConfig(): void
-    {
-        $configFile = $this->configPath . '/' . $this->clienteId . '.txt';
-
-        if (!file_exists($configFile)) {
-            throw new Exception("Cliente '{$this->clienteId}' no encontrado");
-        }
-
-        $lines = file($configFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-
-        foreach ($lines as $line) {
-            // Ignorar comentarios
-            if (strpos(trim($line), ';') === 0) {
-                continue;
-            }
-
-            // Parsear key=value
-            if (strpos($line, '=') !== false) {
-                list($key, $value) = explode('=', $line, 2);
-                $this->config[trim($key)] = trim($value);
-            }
-        }
     }
 
     /**

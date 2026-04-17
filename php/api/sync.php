@@ -25,11 +25,23 @@ if ($apiKey !== $expectedKey) {
     exit;
 }
 
-// Función wcRequest
+// Función wcRequest - LEE DE SESIÓN (no de constantes vacías)
 function wcRequest($endpoint, $method = 'GET', $data = null) {
-    $url = WC_BASE_URL . $endpoint;
+    // Obtener credenciales directamente de la sesión
+    if (!isset($_SESSION['cliente_config'])) {
+        throw new Exception("No hay sesión de cliente activa");
+    }
+    
+    $config = $_SESSION['cliente_config'];
+    
+    // Validar que tenemos credenciales de WooCommerce
+    if (empty($config['wc_url']) || empty($config['wc_key']) || empty($config['wc_secret'])) {
+        throw new Exception("Credenciales de WooCommerce incompletas en la sesión");
+    }
+    
+    $url = $config['wc_url'] . $endpoint;
     $url .= (strpos($url, '?') === false ? '?' : '&');
-    $url .= 'consumer_key=' . WC_CONSUMER_KEY . '&consumer_secret=' . WC_CONSUMER_SECRET;
+    $url .= 'consumer_key=' . urlencode($config['wc_key']) . '&consumer_secret=' . urlencode($config['wc_secret']);
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -45,7 +57,12 @@ function wcRequest($endpoint, $method = 'GET', $data = null) {
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
     curl_close($ch);
+
+    if ($error) {
+        throw new Exception("CURL Error: $error");
+    }
 
     if ($httpCode >= 400) {
         throw new Exception("WooCommerce API error: $httpCode - $response");

@@ -12,7 +12,12 @@ try {
     $result = ['test1' => 'PHP OK'];
 
     // Test 2: Config
-    require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../bootstrap.php';
+
+    if (!isAuthenticated()) {
+        http_response_code(401);
+        die(json_encode(['error' => 'No autenticado']));
+    }
     $result['test2'] = 'Config OK';
     $result['cliente_id'] = $CLIENTE_ID ?? 'no definido';
 

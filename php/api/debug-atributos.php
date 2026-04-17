@@ -1,6 +1,10 @@
 <?php
-require_once __DIR__ . '/../config.php';
-checkAuth();
+require_once __DIR__ . '/../bootstrap.php';
+
+if (!isAuthenticated()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'No autenticado']));
+}
 
 try {
     $db = getDbConnection();

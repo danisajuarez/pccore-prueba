@@ -28,11 +28,23 @@ if ($apiKey !== $expectedKey) {
     exit;
 }
 
-// Función wcRequest
+// Función wcRequest - LEE DE SESIÓN (no de constantes vacías)
 function wcRequest($endpoint, $method = 'GET', $data = null) {
-    $url = WC_BASE_URL . $endpoint;
+    // Obtener credenciales directamente de la sesión
+    if (!isset($_SESSION['cliente_config'])) {
+        throw new Exception("No hay sesión de cliente activa");
+    }
+    
+    $config = $_SESSION['cliente_config'];
+    
+    // Validar que tenemos credenciales de WooCommerce
+    if (empty($config['wc_url']) || empty($config['wc_key']) || empty($config['wc_secret'])) {
+        throw new Exception("Credenciales de WooCommerce incompletas en la sesión");
+    }
+    
+    $url = $config['wc_url'] . $endpoint;
     $url .= (strpos($url, '?') === false ? '?' : '&');
-    $url .= 'consumer_key=' . WC_CONSUMER_KEY . '&consumer_secret=' . WC_CONSUMER_SECRET;
+    $url .= 'consumer_key=' . urlencode($config['wc_key']) . '&consumer_secret=' . urlencode($config['wc_secret']);
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -48,7 +60,12 @@ function wcRequest($endpoint, $method = 'GET', $data = null) {
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
     curl_close($ch);
+
+    if ($error) {
+        throw new Exception("CURL Error: $error");
+    }
 
     if ($httpCode >= 400) {
         throw new Exception("WooCommerce API error: $httpCode - $response");
@@ -116,7 +133,7 @@ try {
     // Usar servicios si están disponibles
     if (class_exists('\App\Container') && \App\Container::isBooted()) {
         $syncService = \App\Container::get(\App\Sige\SyncService::class);
-        $result = $syncService->publishProduct($sku);
+        $result = $syncService->publishProduct($sku, $inputImages, $inputDescripcionML);
         echo json_encode($result);
         exit();
     }
@@ -134,36 +151,35 @@ try {
     // Usar sige_pal_preartlis para precios y sige_ads_artdepsck para stock por depósito
     $listaPrecio = SIGE_LISTA_PRECIO;
     $deposito = SIGE_DEPOSITO;
-    $sql = "SELECT
-                a.ART_IDArticulo as sku,
-                a.ART_DesArticulo as nombre,
-                a.ART_PartNumber as part_number,
-                a.art_artobs as descripcion_larga,
-                (p.PAL_PrecVtaArt * m.MON_CotizMon) AS precio_sin_iva,
-                (p.PAL_PrecVtaArt * m.MON_CotizMon * (1 + (a.ART_PorcIVARI / 100))) AS precio_final,
-                COALESCE(s.ADS_CanFisicoArt - s.ADS_CanReservArt, 0) AS stock,
-                d.ADV_Peso as peso,
-                d.ADV_Alto as alto,
-                d.ADV_Ancho as ancho,
-                d.ADV_Profundidad as profundidad,
-                attr.atr_descatr as attr_nombre,
-                attr.aat_descripcion as attr_valor,
-                lin.LIN_DesLinea as categoria,
-                gli.gli_descripcion as supracategoria,
-                car.CAR_DesCatArt as marca
-            FROM sige_art_articulo a
-            LEFT JOIN sige_pal_preartlis p ON a.ART_IDArticulo = p.ART_IDArticulo
-                AND p.LIS_IDListaPrecio = $listaPrecio
-            LEFT JOIN sige_ads_artdepsck s ON a.ART_IDArticulo = s.ART_IDArticulo
-                AND s.DEP_IDDeposito = $deposito
-            LEFT JOIN sige_adv_artdatvar d ON a.ART_IDArticulo = d.art_idarticulo
-            LEFT JOIN sige_aat_artatrib attr ON a.ART_IDArticulo = attr.art_idarticulo
-            LEFT JOIN sige_lin_linea lin ON a.LIN_IDLinea = lin.LIN_IDLinea
-            LEFT JOIN sige_gli_gruplin gli ON lin.GLI_IdGli = gli.gli_idgli
-            LEFT JOIN sige_car_catarticulo car ON a.CAR_IdCar = car.CAR_IdCar
-            INNER JOIN sige_mon_moneda m ON m.MON_IdMon = 2
-            WHERE TRIM(a.ART_IDArticulo) = ?
-            ORDER BY attr.aat_orden";
+    $sql = "SELECT a.ART_IDArticulo as sku,
+      a.ART_DesArticulo as nombre,
+      a.ART_PartNumber as part_number,
+      a.art_artobs as descripcion_larga,
+      (p.PAL_PrecVtaArt * m.MON_CotizMon) AS precio_sin_iva,
+      (p.PAL_PrecVtaArt * m.MON_CotizMon * (1 + (a.ART_PorcIVARI / 100))) AS precio_final,
+      SUM(s.ADS_CanFisicoArt - s.ADS_CanReservArt) AS stock,
+      d.ADV_Peso as peso,
+      d.ADV_Alto as alto,
+      d.ADV_Ancho as ancho,
+      d.ADV_Profundidad as profundidad,
+      attr.atr_descatr as attr_nombre,
+      attr.aat_descripcion as attr_valor,
+      lin.LIN_DesLinea as categoria,
+      gli.gli_descripcion as supracategoria,
+      car.CAR_DesCatArt as marca
+  FROM sige_art_articulo a
+  INNER JOIN sige_pal_preartlis p ON a.ART_IDArticulo = p.ART_IDArticulo
+  INNER JOIN sige_ads_artdepsck s ON a.ART_IDArticulo = s.ART_IDArticulo
+  INNER JOIN sige_lin_linea lin ON a.LIN_IDLinea = lin.LIN_IDLinea
+  INNER JOIN sige_gli_gruplin gli ON lin.GLI_IdGli = gli.gli_idgli
+  INNER JOIN sige_car_catarticulo car ON a.CAR_IdCar = car.CAR_IdCar
+  INNER JOIN sige_mon_moneda m ON m.MON_IdMon = a.MON_IdMon
+  LEFT JOIN sige_adv_artdatvar d ON a.ART_IDArticulo = d.art_idarticulo
+  LEFT JOIN sige_aat_artatrib attr ON a.ART_IDArticulo = attr.art_idarticulo
+ WHERE a.ART_IDArticulo = ?
+  AND s.DEP_IDDeposito IN ( $deposito )
+  AND p.LIS_IDListaPrecio = $listaPrecio
+  GROUP BY a.ART_IDArticulo";
 
     $stmt = $db->prepare($sql);
     $stmt->bind_param("s", $sku);

@@ -5,7 +5,12 @@ ini_set('display_errors', 1);
 echo "Test 1: PHP funciona ✓<br>";
 
 try {
-    require_once __DIR__ . '/../config.php';
+    require_once __DIR__ . '/../bootstrap.php';
+    
+    if (!isAuthenticated()) {
+        http_response_code(401);
+        die(json_encode(['error' => 'No autenticado']));
+    }
     echo "Test 2: config.php carga ✓<br>";
 } catch (Exception $e) {
     echo "Test 2: ERROR - " . $e->getMessage() . "<br>";
