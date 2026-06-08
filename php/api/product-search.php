@@ -109,9 +109,24 @@ try {
         $wcProduct = $wcClient->findBySku($sku);
         if ($wcProduct !== null) {
             $wooProducto = $mapper->extractWooSummary($wcProduct);
-            // Agregar descripción
+            // Agregar campos adicionales directamente del producto WOO
             if (isset($wcProduct['description'])) {
                 $wooProducto['description'] = $wcProduct['description'];
+            }
+            if (isset($wcProduct['categories'])) {
+                $wooProducto['categories'] = $wcProduct['categories'];
+            }
+            if (isset($wcProduct['attributes'])) {
+                $wooProducto['attributes'] = $wcProduct['attributes'];
+            }
+            if (isset($wcProduct['brands'])) {
+                $wooProducto['brands'] = $wcProduct['brands'];
+            }
+            if (isset($wcProduct['weight'])) {
+                $wooProducto['weight'] = $wcProduct['weight'];
+            }
+            if (isset($wcProduct['dimensions'])) {
+                $wooProducto['dimensions'] = $wcProduct['dimensions'];
             }
         }
     } else {
@@ -211,7 +226,10 @@ try {
                         'stock_quantity' => $p['stock_quantity'],
                         'description' => $p['description'] ?? null,
                         'weight' => $p['weight'] ?? null,
-                        'dimensions' => $p['dimensions'] ?? null
+                        'dimensions' => $p['dimensions'] ?? null,
+                        'categories' => $p['categories'] ?? [],
+                        'attributes' => $p['attributes'] ?? [],
+                        'brands' => $p['brands'] ?? []
                     ];
                     break;
                 }
@@ -233,7 +251,10 @@ try {
                             'stock_quantity' => $p['stock_quantity'],
                             'description' => $p['description'] ?? null,
                             'weight' => $p['weight'] ?? null,
-                            'dimensions' => $p['dimensions'] ?? null
+                            'dimensions' => $p['dimensions'] ?? null,
+                            'categories' => $p['categories'] ?? [],
+                            'attributes' => $p['attributes'] ?? [],
+                            'brands' => $p['brands'] ?? []
                         ];
                         break;
                     }

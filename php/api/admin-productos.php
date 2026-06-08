@@ -777,6 +777,7 @@ header('Content-Type: text/html; charset=utf-8');
                 <div class="nav-links">
                     <a href="/">Sincronizador</a>
                     <a href="/api/admin-productos.php" class="active">Productos</a>
+                    <a href="/api/admin-pedidos.php">Pedidos</a>
                     <a href="/api/admin-logout.php" class="logout">Salir</a>
                 </div>
                 <div class="status" id="statusIndicator">
@@ -814,6 +815,7 @@ header('Content-Type: text/html; charset=utf-8');
                             <span style="font-size: 11px; opacity: 0.8;" id="statusSubtext"></span>
                         </div>
                         <button class="product-status-action" id="statusAction" style="display: none;">-</button>
+                        <button class="product-status-action" id="republishAction" style="display: none; background: #dc2626;">🔃 Republicar</button>
                     </div>
 
                     <!-- Nombre del producto -->
@@ -939,11 +941,11 @@ header('Content-Type: text/html; charset=utf-8');
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Precio s/IVA</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #94a3b8;" id="updPrecioSinIva">-</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Categoría</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155;" id="updCategoria">-</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155;" id="updCategoria">-<span id="updCategoriaDiff" style="display: none; margin-left: 8px; background: #f59e0b; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 10px;">⚠️ Diferente en WOO</span></td>
                             </tr>
                             <tr>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Marca</td>
-                                <td style="padding: 8px; border-bottom: 1px solid #334155;" id="updMarca">-</td>
+                                <td style="padding: 8px; border-bottom: 1px solid #334155;" id="updMarca">-<span id="updMarcaDiff" style="display: none; margin-left: 8px; background: #f59e0b; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 10px;">⚠️ Diferente en WOO</span></td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155; color: #64748b;">Peso</td>
                                 <td style="padding: 8px; border-bottom: 1px solid #334155;" id="updPeso">-</td>
                             </tr>
@@ -973,9 +975,17 @@ header('Content-Type: text/html; charset=utf-8');
                                     <input type="checkbox" id="checkDescripcion" style="accent-color: #3b82f6; pointer-events: none;">
                                     <span style="font-size: 12px;">📝 Descripción</span>
                                 </label>
-                                <label id="labelImagenes" style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #0f172a; padding: 6px 12px; border-radius: 6px; border: 1px solid #334155;" onclick="toggleCheckLabel('Imagenes')">
-                                    <input type="checkbox" id="checkImagenes" style="accent-color: #3b82f6; pointer-events: none;">
-                                    <span style="font-size: 12px;">🖼️ Imágenes <span id="imgCountBadge" style="display: none; background: #3b82f6; color: white; padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-left: 4px;"></span></span>
+                                <label id="labelCategorias" style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #0f172a; padding: 6px 12px; border-radius: 6px; border: 1px solid #334155;" onclick="toggleCheckLabel('Categorias')">
+                                    <input type="checkbox" id="checkCategorias" style="accent-color: #3b82f6; pointer-events: none;">
+                                    <span style="font-size: 12px;">📁 Categorías <span id="catCountBadge" style="display: none; background: #3b82f6; color: white; padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-left: 4px;"></span></span>
+                                </label>
+                                <label id="labelMarca" style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #0f172a; padding: 6px 12px; border-radius: 6px; border: 1px solid #334155;" onclick="toggleCheckLabel('Marca')">
+                                    <input type="checkbox" id="checkMarca" style="accent-color: #3b82f6; pointer-events: none;">
+                                    <span style="font-size: 12px;">🏷️ Marca</span>
+                                </label>
+                                <label id="labelAtributos" style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #0f172a; padding: 6px 12px; border-radius: 6px; border: 1px solid #334155;" onclick="toggleCheckLabel('Atributos')">
+                                    <input type="checkbox" id="checkAtributos" style="accent-color: #3b82f6; pointer-events: none;">
+                                    <span style="font-size: 12px;">⚙️ Atributos <span id="attrCountBadge" style="display: none; background: #3b82f6; color: white; padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-left: 4px;"></span></span>
                                 </label>
                             </div>
                         </div>
@@ -1057,6 +1067,7 @@ header('Content-Type: text/html; charset=utf-8');
         let stats = { buscados: 0, publicados: 0, sinPublicar: 0 };
         let descripcionSeleccionada = null;
         let descripcionParaPublicar = null;
+        let descripcionMLCorta = null;
         let dimensionesML = null;
         let buscarProductoRequestId = 0;
         let activeOperations = 0;
@@ -1102,6 +1113,7 @@ header('Content-Type: text/html; charset=utf-8');
         function limpiarEstadoAnterior() {
             // Limpiar variables globales de ML
             descripcionParaPublicar = null;
+            descripcionMLCorta = null;
             dimensionesML = null;
             imagenesML = [];
             imagenesParaPublicar = [];
@@ -1212,6 +1224,10 @@ header('Content-Type: text/html; charset=utf-8');
                 stats.buscados++;
                 if (wooProducto) {
                     stats.publicados++;
+                    // DEBUG: Ver qué datos trae de WOO
+                    console.log('🔍 wooProducto recibido:', wooProducto);
+                    console.log('🔍 categories:', wooProducto.categories);
+                    console.log('🔍 attributes:', wooProducto.attributes);
                 } else {
                     stats.sinPublicar++;
                 }
@@ -1256,10 +1272,23 @@ header('Content-Type: text/html; charset=utf-8');
 
             // Atributos (guardamos pero no mostramos, los datos están en la tabla)
             const attrDiv = document.getElementById('prodAtributos');
+            const attrCountBadge = document.getElementById('attrCountBadge');
+            const checkAtributosEl = document.getElementById('checkAtributos');
             if (attrDiv && productoActual.atributos && productoActual.atributos.length > 0) {
                 attrDiv.innerHTML = productoActual.atributos.map(a =>
                     `<div class="attr-item"><div class="attr-name">${a.nombre}</div><div class="attr-value">${a.valor}</div></div>`
                 ).join('');
+                // Mostrar badge con cantidad y auto-activar checkbox
+                if (attrCountBadge) {
+                    attrCountBadge.textContent = productoActual.atributos.length;
+                    attrCountBadge.style.display = 'inline-block';
+                }
+                if (checkAtributosEl && !checkAtributosEl.checked) {
+                    checkAtributosEl.checked = true;
+                }
+            } else {
+                if (attrCountBadge) attrCountBadge.style.display = 'none';
+                if (checkAtributosEl) checkAtributosEl.checked = false;
             }
 
             // Mostrar categorías de SIGE (automáticas)
@@ -1295,10 +1324,15 @@ header('Content-Type: text/html; charset=utf-8');
             const statusText = document.getElementById('statusText');
             const statusSubtext = document.getElementById('statusSubtext');
             const statusAction = document.getElementById('statusAction');
+            const republishAction = document.getElementById('republishAction');
             const statusEl = document.getElementById('prodStatus');
             const actionsEl = document.getElementById('productActions');
 
             if (wooProducto) {
+                // Mostrar botón Republicar para productos existentes
+                republishAction.style.display = 'block';
+                republishAction.onclick = republicarProducto;
+
                 if (wooProducto.status === 'publish') {
                     // Producto PUBLICADO
                     statusBanner.className = 'product-status-banner published';
@@ -1358,6 +1392,7 @@ header('Content-Type: text/html; charset=utf-8');
                 statusText.textContent = '🆕 Producto no publicado';
                 statusSubtext.textContent = 'Este producto no está en la tienda. Podés publicarlo ahora.';
                 statusAction.style.display = 'none';
+                republishAction.style.display = 'none';
 
                 statusEl.className = 'status-badge status-not-in-woo';
                 statusEl.textContent = 'No publicado';
@@ -1509,10 +1544,65 @@ header('Content-Type: text/html; charset=utf-8');
             let cat = [];
             if (productoActual.supracategoria) cat.push(productoActual.supracategoria);
             if (productoActual.categoria) cat.push(productoActual.categoria);
-            document.getElementById('updCategoria').textContent = cat.length ? cat.join(' → ') : 'Sin categoría';
+            const categoriaSige = cat.length ? cat.join(' → ') : 'Sin categoría';
+
+            // Comparar con categorías de WooCommerce
+            let categoriaWoo = 'Sin categoría';
+            let categoriaDiferente = false;
+            if (wooProducto && wooProducto.categories && wooProducto.categories.length > 0) {
+                categoriaWoo = wooProducto.categories.map(c => c.name).join(', ');
+                // Verificar si la categoría de SIGE está en WooCommerce
+                const catSigeLower = (productoActual.categoria || '').toLowerCase();
+                const catsWooLower = wooProducto.categories.map(c => c.name.toLowerCase());
+                if (catSigeLower && !catsWooLower.includes(catSigeLower)) {
+                    categoriaDiferente = true;
+                }
+            } else if (cat.length > 0) {
+                // WOO no tiene categorías pero SIGE sí
+                categoriaDiferente = true;
+            }
+
+            const updCategoriaEl = document.getElementById('updCategoria');
+            const updCategoriaDiff = document.getElementById('updCategoriaDiff');
+            updCategoriaEl.childNodes[0].textContent = categoriaSige;
+            if (categoriaDiferente && updCategoriaDiff) {
+                updCategoriaDiff.style.display = 'inline';
+                updCategoriaDiff.title = 'WOO: ' + categoriaWoo;
+            } else if (updCategoriaDiff) {
+                updCategoriaDiff.style.display = 'none';
+            }
 
             // Marca
-            document.getElementById('updMarca').textContent = productoActual.marca || 'Sin marca';
+            const marcaSige = productoActual.marca || 'Sin marca';
+
+            // Comparar marca con el plugin de brands de WooCommerce
+            let marcaWoo = '';
+            let marcaDiferente = false;
+            if (wooProducto && wooProducto.brands && wooProducto.brands.length > 0) {
+                marcaWoo = wooProducto.brands[0].name;
+            } else if (wooProducto && wooProducto.attributes && wooProducto.attributes.length > 0) {
+                // Fallback: buscar en atributos genéricos por si acaso
+                const attrMarca = wooProducto.attributes.find(a => a.name.toLowerCase() === 'marca');
+                if (attrMarca && attrMarca.options && attrMarca.options.length > 0) {
+                    marcaWoo = attrMarca.options[0];
+                }
+            }
+            if (marcaSige !== 'Sin marca' && marcaWoo.toLowerCase() !== marcaSige.toLowerCase()) {
+                marcaDiferente = true;
+            }
+
+            const updMarcaEl = document.getElementById('updMarca');
+            const updMarcaDiff = document.getElementById('updMarcaDiff');
+            updMarcaEl.childNodes[0].textContent = marcaSige;
+            if (marcaDiferente && updMarcaDiff) {
+                updMarcaDiff.style.display = 'inline';
+                updMarcaDiff.title = marcaWoo ? 'WOO: ' + marcaWoo : 'No tiene marca en WOO';
+                // Auto-activar checkbox de marca cuando hay diferencia
+                const checkMarca = document.getElementById('checkMarca');
+                if (checkMarca) checkMarca.checked = true;
+            } else if (updMarcaDiff) {
+                updMarcaDiff.style.display = 'none';
+            }
 
             // Peso - primero SIGE, si no WooCommerce
             let peso = productoActual.peso;
@@ -1584,10 +1674,7 @@ header('Content-Type: text/html; charset=utf-8');
                 dimContainer.innerHTML = `<span style="color: #22c55e;">✓ SIGE: ${dims.join(' | ')}</span>`;
             }
 
-            // Si ya tenemos todo de SIGE, no buscar en ML
-            if (tieneDescSige && tieneDimSige) return;
-
-            // Mostrar estado de búsqueda
+            // Mostrar estado de búsqueda en ML (siempre buscamos para tener descripción corta)
             if (!tieneDescSige && descContainer) {
                 descContainer.innerHTML = `<div style="color: #94a3b8; font-size: 12px;">⏳ Buscando en ML...</div>`;
             }
@@ -1607,7 +1694,12 @@ header('Content-Type: text/html; charset=utf-8');
 
                 const data = await response.json();
 
-                // Procesar descripción si no la tenemos de SIGE
+                // Guardar descripción de ML como descripción corta (siempre)
+                if (data.ml_data?.descripcion) {
+                    descripcionMLCorta = data.ml_data.descripcion;
+                }
+
+                // Procesar descripción larga si no la tenemos de SIGE
                 if (!tieneDescSige && descContainer) {
                     if (data.ml_data?.descripcion) {
                         descripcionParaPublicar = data.ml_data.descripcion;
@@ -1826,8 +1918,11 @@ header('Content-Type: text/html; charset=utf-8');
                     sku: productoActual.sku
                 };
 
-                // Agregar descripción de ML si la hay (y no hay en SIGE)
-                if (descripcionParaPublicar && !productoActual.descripcion_larga) {
+                // Descripción de ML como short_description (siempre que esté disponible)
+                if (descripcionMLCorta) {
+                    publishData.descripcion_ml = descripcionMLCorta;
+                    addLog(`📝 Incluyendo descripción corta de ML...`, '');
+                } else if (descripcionParaPublicar && !productoActual.descripcion_larga) {
                     publishData.descripcion_ml = descripcionParaPublicar;
                     addLog(`📝 Incluyendo descripción de ML...`, '');
                 }
@@ -2307,12 +2402,6 @@ header('Content-Type: text/html; charset=utf-8');
                 if (imagenesSeleccionadas.length > 0) {
                     badge.textContent = imagenesSeleccionadas.length;
                     badge.style.display = 'inline';
-                    // Auto-tildar imágenes si hay seleccionadas
-                    const checkImagenes = document.getElementById('checkImagenes');
-                    if (checkImagenes && !checkImagenes.checked) {
-                        checkImagenes.checked = true;
-                        toggleSimpleCheck('checkImagenes');
-                    }
                 } else {
                     badge.style.display = 'none';
                 }
@@ -2337,10 +2426,9 @@ header('Content-Type: text/html; charset=utf-8');
             btn.innerHTML = '<span class="spinner"></span>Procesando...';
 
             const checkPrecioStock = document.getElementById('checkPrecioStock').checked;
-            const checkImagenes = document.getElementById('checkImagenes').checked;
 
             const imagenesSeleccionadas = document.querySelectorAll('#mlImagesGrid .image-card.selected');
-            const tieneImagenes = checkImagenes && imagenesSeleccionadas.length > 0;
+            const tieneImagenes = imagenesSeleccionadas.length > 0;
 
             let exitoso = true;
             let actualizados = [];
@@ -2552,7 +2640,7 @@ header('Content-Type: text/html; charset=utf-8');
                         body: JSON.stringify({
                             id: productId,
                             description: productoActual.descripcion_larga,
-                            short_description: productoActual.nombre
+                            short_description: descripcionMLCorta || ''
                         })
                     });
 
@@ -2597,31 +2685,117 @@ header('Content-Type: text/html; charset=utf-8');
                     }
                 }
 
-                // 4. Actualizar categorías si están seleccionadas
+                // 4. Actualizar categorías desde SIGE (automático, sin requerir selección manual)
                 const checkCategorias = document.getElementById('checkCategorias').checked;
-                const tieneCategorias = checkCategorias && categoriasSeleccionadas.length > 0;
 
-                if (tieneCategorias && exitoso && productId) {
-                    addLog(`Actualizando categorías (${categoriasSeleccionadas.length})...`, '');
+                if (checkCategorias && exitoso && productId && productoActual.categoria) {
+                    addLog(`Resolviendo categorías desde SIGE...`, '');
 
-                    const response = await fetch(`${API_BASE}/categories.php?action=assign&api_key=${API_KEY}`, {
+                    // Si el modal no fue abierto, categoriasDisponibles está vacío — cargar ahora
+                    if (categoriasDisponibles.length === 0) {
+                        const listRes = await fetch(`${API_BASE}/categories.php?action=list&api_key=${API_KEY}`);
+                        const listData = await listRes.json();
+                        if (listData.success && listData.categories) {
+                            categoriasDisponibles = listData.categories;
+                        }
+                    }
+
+                    // Resolver IDs desde SIGE: buscar categoria y supracategoria por nombre
+                    const idsAAsignar = [];
+                    const camposSige = [productoActual.supracategoria, productoActual.categoria].filter(Boolean);
+
+                    addLog(`Categorías SIGE a asignar: ${camposSige.join(', ')} (${categoriasDisponibles.length} disponibles en WOO)`, '');
+
+                    camposSige.forEach(nombreSige => {
+                        const matches = categoriasDisponibles.filter(c =>
+                            c.name.toLowerCase().trim() === nombreSige.toLowerCase().trim()
+                        );
+                        // Si hay duplicados, tomar la que tiene más productos
+                        const match = matches.length > 1
+                            ? matches.reduce((a, b) => (b.count > a.count ? b : a))
+                            : matches[0];
+                        if (match && !idsAAsignar.includes(match.id)) {
+                            idsAAsignar.push(match.id);
+                            addLog(`  ✓ "${nombreSige}" → ID ${match.id}${matches.length > 1 ? ' (seleccionada de ' + matches.length + ' duplicadas)' : ''}`, '');
+                        } else if (!match) {
+                            addLog(`  ⚠ "${nombreSige}" no encontrada en WooCommerce`, 'warning');
+                        }
+                    });
+
+                    if (idsAAsignar.length === 0) {
+                        addLog(`⚠ Categoría "${productoActual.categoria}" no encontrada en WooCommerce`, 'warning');
+                    } else {
+                        const response = await fetch(`${API_BASE}/categories.php?action=assign&api_key=${API_KEY}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                product_id: productId,
+                                category_ids: idsAAsignar
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            addLog(`✓ Categorías actualizadas: ${data.categories.map(c => c.name).join(', ')}`, 'success');
+                            actualizados.push(`${data.categories.length} categorías`);
+                        } else {
+                            addLog(`✗ Error actualizando categorías: ${data.error}`, 'error');
+                            exitoso = false;
+                        }
+                    }
+                }
+
+                // 4.5. Actualizar marca si está marcado el checkbox
+                const checkMarca = document.getElementById('checkMarca').checked;
+                if (checkMarca && exitoso && productId && productoActual.marca) {
+                    addLog(`Actualizando marca: ${productoActual.marca}...`, '');
+
+                    const response = await fetch(`${API_BASE}/product-update.php?api_key=${API_KEY}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            product_id: productId,
-                            category_ids: categoriasSeleccionadas
+                            id: productId,
+                            atributos: [{ nombre: 'Marca', valor: productoActual.marca }]
                         })
                     });
 
                     const data = await response.json();
 
                     if (data.success) {
-                        addLog(`✓ Categorías actualizadas: ${data.categories.length}`, 'success');
-                        actualizados.push(`${data.categories.length} categorías`);
+                        addLog(`✓ Marca actualizada: ${productoActual.marca}`, 'success');
+                        actualizados.push('marca');
                     } else {
-                        addLog(`✗ Error actualizando categorías: ${data.error}`, 'error');
+                        addLog(`✗ Error actualizando marca: ${data.error || data.errors?.join(', ')}`, 'error');
                         exitoso = false;
                     }
+                }
+
+                // 4.6. Actualizar atributos si está marcado el checkbox
+                const checkAtributos = document.getElementById('checkAtributos').checked;
+                if (checkAtributos && productId && productoActual.atributos && productoActual.atributos.length > 0) {
+                    addLog(`Actualizando atributos (${productoActual.atributos.length})...`, '');
+
+                    const response = await fetch(`${API_BASE}/product-update.php?api_key=${API_KEY}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: productId,
+                            atributos: productoActual.atributos
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        addLog(`✓ Atributos actualizados: ${productoActual.atributos.length}`, 'success');
+                        actualizados.push(`${productoActual.atributos.length} atributos`);
+                    } else {
+                        addLog(`✗ Error actualizando atributos: ${data.error || data.errors?.join(', ')}`, 'error');
+                        exitoso = false;
+                    }
+                } else if (checkAtributos && (!productoActual.atributos || productoActual.atributos.length === 0)) {
+                    addLog(`⚠ El producto no tiene atributos en SIGE`, 'warning');
                 }
 
                 // 5. Recargar producto si todo salió bien
@@ -2672,6 +2846,32 @@ header('Content-Type: text/html; charset=utf-8');
         async function desactivarProducto() {
             if (!confirm('¿Desactivar este producto de la web?')) return;
             await cambiarEstado('draft');
+        }
+
+        async function republicarProducto() {
+            if (!productoActual) return;
+            if (!confirm(`¿Republicar "${productoActual.nombre}"?\n\nEsto borrará el producto de WooCommerce y lo volverá a crear desde cero.\n\nÚtil para arreglar productos que no aparecen en categorías.`)) return;
+
+            addLog(`Republicando ${productoActual.sku}...`, '');
+
+            try {
+                const response = await fetch(`${API_BASE}/product-republish.php?api_key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sku: productoActual.sku })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    addLog(`✓ Republicado OK (nuevo ID: ${data.paso2_publicar?.producto_id})`, 'success');
+                    // Recargar producto después de 1 segundo
+                    setTimeout(() => buscarProducto(), 1000);
+                } else {
+                    addLog(`✗ Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                addLog(`✗ Error: ${error.message}`, 'error');
+            }
         }
 
         async function cambiarEstado(nuevoEstado) {
@@ -2844,11 +3044,6 @@ header('Content-Type: text/html; charset=utf-8');
                             if (card) card.classList.add('selected');
                         });
 
-                        // Auto-activar checkbox de imágenes en ALTA
-                        const checkImagenes = document.getElementById('checkImagenes');
-                        if (checkImagenes && !checkImagenes.checked) {
-                            checkImagenes.checked = true;
-                        }
                     } else {
                         // Desmarcar todas en modificación
                         document.querySelectorAll('#mlImagesGrid .image-card').forEach(card => {
@@ -2879,17 +3074,6 @@ header('Content-Type: text/html; charset=utf-8');
         function toggleImageSelect(card) {
             card.classList.toggle('selected');
             updateImageCount();
-
-            // Auto-activar checkbox de imágenes si se selecciona alguna
-            const imagenesSeleccionadas = document.querySelectorAll('#mlImagesGrid .image-card.selected');
-            if (imagenesSeleccionadas.length > 0) {
-                const checkImagenes = document.getElementById('checkImagenes');
-                const optionImagenes = document.getElementById('optionImagenes');
-                if (checkImagenes && optionImagenes && !checkImagenes.checked) {
-                    checkImagenes.checked = true;
-                    optionImagenes.classList.add('active');
-                }
-            }
         }
 
         function toggleSelectAll() {
@@ -3118,11 +3302,13 @@ header('Content-Type: text/html; charset=utf-8');
                             // Guardar categorías actuales
                             categoriasSeleccionadas = catData.categories.map(c => c.id);
 
-                            // Mostrar categorías actuales
-                            currentCategoriesDiv.style.display = 'block';
-                            currentCategoriesList.innerHTML = catData.categories.map(cat =>
-                                `<span style="background: #22c55e; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px;">${cat.name}</span>`
-                            ).join('');
+                            // Mostrar categorías actuales (solo existe en sección publicación/alta)
+                            if (currentCategoriesDiv) {
+                                currentCategoriesDiv.style.display = 'block';
+                                currentCategoriesList.innerHTML = catData.categories.map(cat =>
+                                    `<span style="background: #22c55e; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px;">${cat.name}</span>`
+                                ).join('');
+                            }
 
                             // Actualizar badge
                             const badge = document.getElementById('catCountBadge');
@@ -3130,11 +3316,56 @@ header('Content-Type: text/html; charset=utf-8');
                                 badge.textContent = catData.categories.length;
                                 badge.style.display = 'inline-block';
                             }
+
+                            // === AUTO-SELECCIONAR CATEGORÍA DE SIGE SI ES DIFERENTE ===
+                            // Verificar si la categoría de SIGE está en WooCommerce
+                            const catSigeLower = (productoActual.categoria || '').toLowerCase().trim();
+                            const catsWooNames = catData.categories.map(c => c.name.toLowerCase().trim());
+
+                            if (catSigeLower && !catsWooNames.includes(catSigeLower)) {
+                                // La categoría de SIGE NO está en WOO, buscar y auto-seleccionar
+                                // Si hay duplicados, tomar la que tiene más productos
+                                const catMatches = categoriasDisponibles.filter(c =>
+                                    c.name.toLowerCase().trim() === catSigeLower
+                                );
+                                const categoriaSigeEnWoo = catMatches.length > 1
+                                    ? catMatches.reduce((a, b) => (b.count > a.count ? b : a))
+                                    : catMatches[0];
+
+                                if (categoriaSigeEnWoo && !categoriasSeleccionadas.includes(categoriaSigeEnWoo.id)) {
+                                    // Auto-seleccionar la categoría de SIGE
+                                    categoriasSeleccionadas.push(categoriaSigeEnWoo.id);
+                                    addLog(`⚠️ Categoría SIGE "${productoActual.categoria}" encontrada - auto-seleccionada`, 'warning');
+
+                                    // Activar checkbox de categorías
+                                    const checkCategorias = document.getElementById('checkCategorias');
+                                    if (checkCategorias) checkCategorias.checked = true;
+                                }
+                            }
+                        }
+                    } else if (productoActual.categoria) {
+                        // Producto publicado pero SIN categorías en WOO
+                        // Buscar la categoría de SIGE y auto-seleccionarla
+                        const catSigeLower = productoActual.categoria.toLowerCase().trim();
+                        const catMatches2 = categoriasDisponibles.filter(c =>
+                            c.name.toLowerCase().trim() === catSigeLower
+                        );
+                        const categoriaSigeEnWoo = catMatches2.length > 1
+                            ? catMatches2.reduce((a, b) => (b.count > a.count ? b : a))
+                            : catMatches2[0];
+
+                        if (categoriaSigeEnWoo) {
+                            categoriasSeleccionadas = [categoriaSigeEnWoo.id];
+                            addLog(`⚠️ Sin categorías en WOO - auto-seleccionada "${productoActual.categoria}"`, 'warning');
+
+                            // Activar checkbox de categorías
+                            const checkCategorias = document.getElementById('checkCategorias');
+                            if (checkCategorias) checkCategorias.checked = true;
                         }
                     }
 
-                    // Mostrar categorías sugeridas
-                    if (categoriasSugeridas.length > 0) {
+                    // Mostrar categorías sugeridas (solo existe en sección publicación/alta)
+                    if (categoriasSugeridas.length > 0 && suggestedCategoriesDiv) {
                         suggestedCategoriesDiv.style.display = 'block';
                         suggestedCategoriesList.innerHTML = categoriasSugeridas.map(cat => {
                             const isSelected = categoriasSeleccionadas.includes(cat.id);
@@ -3160,8 +3391,8 @@ header('Content-Type: text/html; charset=utf-8');
                         }
                     }
 
-                    // Mostrar lista completa de categorías
-                    categoriesList.innerHTML = categoriasDisponibles.map(cat => {
+                    // Mostrar lista completa de categorías (solo existe en sección publicación/alta)
+                    if (categoriesList) categoriesList.innerHTML = categoriasDisponibles.map(cat => {
                         const isSelected = categoriasSeleccionadas.includes(cat.id);
                         const isParent = cat.parent === 0;
                         const isSuggested = categoriasSugeridas.find(s => s.id === cat.id);
@@ -3174,15 +3405,15 @@ header('Content-Type: text/html; charset=utf-8');
                         `;
                     }).join('');
 
-                    updateCategoriasCount();
+                    if (categoriesList) updateCategoriasCount();
 
-                } else {
+                } else if (categoriesList) {
                     categoriesList.innerHTML = '<p style="color: #ef4444; padding: 10px;">Error cargando categorías</p>';
                 }
 
             } catch (error) {
                 console.error('Error cargando categorías:', error);
-                categoriesList.innerHTML = '<p style="color: #ef4444; padding: 10px;">Error: ' + error.message + '</p>';
+                if (categoriesList) categoriesList.innerHTML = '<p style="color: #ef4444; padding: 10px;">Error: ' + error.message + '</p>';
             }
         }
 

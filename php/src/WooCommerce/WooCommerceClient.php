@@ -174,6 +174,26 @@ class WooCommerceClient
     }
 
     /**
+     * Listar pedidos
+     */
+    public function getOrders(array $params = []): array
+    {
+        $endpoint = '/orders';
+        if (!empty($params)) {
+            $endpoint .= '?' . http_build_query($params);
+        }
+        return $this->request($endpoint);
+    }
+
+    /**
+     * Obtener pedido por ID
+     */
+    public function getOrder(int $id): array
+    {
+        return $this->request("/orders/{$id}");
+    }
+
+    /**
      * Establecer timeout
      */
     public function setTimeout(int $seconds): self
@@ -194,17 +214,25 @@ class WooCommerceClient
 
         $nombre = trim($nombre);
 
-        // Buscar categoría existente
+        // Buscar categoría existente por nombre (sin filtrar por padre para evitar duplicados)
         $categorias = $this->request('/products/categories?search=' . urlencode($nombre) . '&per_page=100');
 
+        // 1. Primero buscar coincidencia exacta con mismo padre
         foreach ($categorias as $cat) {
-            // Coincidencia exacta (case-insensitive) y mismo padre
             if (strcasecmp($cat['name'], $nombre) === 0 && $cat['parent'] == $parentId) {
                 return $cat['id'];
             }
         }
 
-        // Si no existe, crear
+        // 2. Si no hay con ese padre, buscar cualquier coincidencia exacta de nombre
+        //    para reusar la existente en lugar de crear un duplicado
+        foreach ($categorias as $cat) {
+            if (strcasecmp($cat['name'], $nombre) === 0) {
+                return $cat['id'];
+            }
+        }
+
+        // 3. No existe — crear nueva
         try {
             $newCat = $this->request('/products/categories', 'POST', [
                 'name' => $nombre,

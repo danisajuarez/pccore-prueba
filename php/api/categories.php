@@ -78,8 +78,16 @@ $action = $_GET['action'] ?? 'list';
 try {
     switch ($action) {
         case 'list':
-            // Listar todas las categorías disponibles en WooCommerce
-            $categories = wcRequest('/products/categories?per_page=100&orderby=name&order=asc');
+            // Listar todas las categorías disponibles en WooCommerce (paginado, máx 100 por página)
+            $allCategories = [];
+            $page = 1;
+            do {
+                $batch = wcRequest("/products/categories?per_page=100&orderby=name&order=asc&hide_empty=false&page={$page}");
+                if (!empty($batch)) {
+                    $allCategories = array_merge($allCategories, $batch);
+                }
+                $page++;
+            } while (!empty($batch) && count($batch) === 100);
 
             $categoriesFormatted = array_map(function($cat) {
                 return [
@@ -89,7 +97,7 @@ try {
                     'parent' => $cat['parent'],
                     'count' => $cat['count']
                 ];
-            }, $categories);
+            }, $allCategories);
 
             echo json_encode([
                 'success' => true,

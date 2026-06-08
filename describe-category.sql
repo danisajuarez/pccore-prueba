@@ -1,0 +1,1 @@
+DESCRIBE wp_wc_category_lookup;

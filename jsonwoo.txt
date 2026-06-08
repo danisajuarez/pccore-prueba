@@ -1,0 +1,148 @@
+{
+    "id": 17161,
+    "parent_id": 0,
+    "status": "processing",
+    "currency": "ARS",
+    "version": "10.7.0",
+    "prices_include_tax": false,
+    "date_created": "2026-05-31T01:48:36",
+    "date_modified": "2026-05-31T01:55:26",
+    "date_completed": null,
+    "date_paid": "2026-05-31T01:55:26",
+    "date_created_gmt": "2026-05-31T01:48:36",
+    "date_modified_gmt": "2026-05-31T01:55:26",
+    "date_completed_gmt": null,
+    "date_paid_gmt": "2026-05-31T01:55:26",
+    "number": "17161",
+    "order_key": "wc_order_ZKvEBfCdEdCQk",
+    "created_via": "checkout",
+    "customer_id": 0,
+    "customer_note": "",
+    "customer_ip_address": "2803:9800:9504:69f5:a53f:a78e:2f21:a581",
+    "customer_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",
+    "cart_hash": "bcf99c1813d944b9fc5efb76a1123ffe",
+    "payment_method": "woo-mercado-pago-basic",
+    "payment_method_title": "Paga con Mercado Pago",
+    "transaction_id": "",
+    "payment_url": "https://dlgarbe.com.ar/checkout-2/pagar/17161/?pay_for_order=true&key=wc_order_ZKvEBfCdEdCQk",
+    "is_editable": false,
+    "needs_payment": false,
+    "needs_processing": true,
+    "discount_total": "0",
+    "discount_tax": "0",
+    "shipping_total": "6230",
+    "shipping_tax": "0",
+    "cart_tax": "0",
+    "total": "125570",
+    "total_tax": "0",
+    "currency_symbol": "$",
+    "prices_include_tax": false,
+
+    "billing": {
+        "first_name": "Axel Enrique Galeed",
+        "last_name": "Gutierrez",
+        "company": "",
+        "address_1": "Nicaragua 851",
+        "address_2": "Entre Cuba y San Lorenzo",
+        "city": "San Salvador de Jujuy",
+        "state": "Y",
+        "postcode": "4600",
+        "country": "AR",
+        "email": "galeedshopping@gmail.com",
+        "phone": "3884438912"
+    },
+
+    "shipping": {
+        "first_name": "Axel Enrique Galeed",
+        "last_name": "Gutierrez",
+        "company": "",
+        "address_1": "Nicaragua 851",
+        "address_2": "Entre Cuba y San Lorenzo",
+        "city": "San Salvador de Jujuy",
+        "state": "Y",
+        "postcode": "4600",
+        "country": "AR",
+        "phone": ""
+    },
+
+    "line_items": [
+        {
+            "id": 749,
+            "name": "Tableta Wacom Intuos Medium Bluetooth Negra CTL6100WLK0",
+            "product_id": 12864,
+            "variation_id": 0,
+            "quantity": 1,
+            "tax_class": "",
+            "subtotal": "119340",
+            "subtotal_tax": "0",
+            "total": "119340",
+            "total_tax": "0",
+            "taxes": [],
+            "sku": "753218986832",
+            "global_unique_id": "",
+            "price": 119340,
+            "image": {
+                "id": "12859",
+                "src": "https://dlgarbe.com.ar/wp-content/uploads/2024/09/WAC-CTL6100WLK0_IM01.jpg"
+            },
+            "parent_name": null,
+            "meta_data": [
+                {
+                    "id": 5526,
+                    "key": "_reduced_stock",
+                    "value": "1",
+                    "display_key": "_reduced_stock",
+                    "display_value": "1"
+                }
+            ]
+        }
+    ],
+
+    "tax_lines": [],
+    "fee_lines": [],
+    "coupon_lines": [],
+    "refunds": [],
+
+    "shipping_lines": [
+        {
+            "id": 750,
+            "method_title": "Retiro en sucursal de Correo Argentino",
+            "method_id": "correo_argentino",
+            "instance_id": "2",
+            "total": "6230",
+            "total_tax": "0",
+            "taxes": [],
+            "tax_status": "taxable",
+            "meta_data": []
+        }
+    ],
+
+    "meta_data": [
+        { "id": 178800, "key": "_billing_dni",                              "value": "43269089" },
+        { "id": 178801, "key": "is_vat_exempt",                             "value": "no" },
+        { "id": 178802, "key": "_sucursal_pv_centro_ca_estandar",           "value": "Y0000" },
+        { "id": 178803, "key": "sucursal_ca_c",                             "value": "Y0000" },
+        { "id": 178804, "key": "_chosen_shipping_ca",                       "value": "\"correo_argentino-sas\"" },
+        { "id": 178805, "key": "billing_dni",                               "value": "43269089" },
+        { "id": 178806, "key": "_wc_order_attribution_source_type",         "value": "organic" },
+        { "id": 178807, "key": "_wc_order_attribution_referrer",            "value": "https://www.google.com/" },
+        { "id": 178808, "key": "_wc_order_attribution_utm_source",          "value": "google" },
+        { "id": 178809, "key": "_wc_order_attribution_utm_medium",          "value": "organic" },
+        { "id": 178810, "key": "_wc_order_attribution_session_entry",       "value": "https://dlgarbe.com.ar/producto/tableta-wacom-intuos-medium-bluetooth-verde-ctl6100wl-eo-ax/" },
+        { "id": 178811, "key": "_wc_order_attribution_session_start_time",  "value": "2026-05-31 01:41:46" },
+        { "id": 178812, "key": "_wc_order_attribution_session_pages",       "value": "12" },
+        { "id": 178813, "key": "_wc_order_attribution_session_count",       "value": "1" },
+        { "id": 178814, "key": "_wc_order_attribution_user_agent",          "value": "Mozilla/5.0 ..." },
+        { "id": 178815, "key": "_wc_order_attribution_device_type",         "value": "Desktop" },
+        { "id": 178818, "key": "is_production_mode",                        "value": "yes" },
+        { "id": 178819, "key": "_used_gateway",                             "value": "woo-mercado-pago-basic" },
+        { "id": 178820, "key": "blocks_payment",                            "value": "no" },
+        { "id": 178822, "key": "Mercado Pago - Payment 161792562058",       "value": "[Date 2026-05-31 01:56:26]/[Amount 125570]/[Payment Type credit_card]/[Payment Method master]/[Paid 125570]/[Coupon 0]/[Refund 0]" },
+        { "id": 178823, "key": "Mercado Pago - 161792562058 - installments",        "value": "12" },
+        { "id": 178824, "key": "Mercado Pago - 161792562058 - installment_amount",  "value": "10464.17" },
+        { "id": 178825, "key": "Mercado Pago - 161792562058 - transaction_amount",  "value": "125570" },
+        { "id": 178826, "key": "Mercado Pago - 161792562058 - total_paid_amount",   "value": "125570" },
+        { "id": 178827, "key": "Mercado Pago - 161792562058 - card_last_four_digits","value": "5362" },
+        { "id": 178828, "key": "_Mercado_Pago_Payment_IDs",                 "value": "161792562058" }
+    ]
+}

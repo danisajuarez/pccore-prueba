@@ -49,7 +49,7 @@ class MasterDatabase
             throw new Exception("Error conectando a BD Master: " . self::$connection->connect_error);
         }
 
-        self::$connection->set_charset("utf8");
+        self::$connection->set_charset("utf8mb4");
     }
 
     /**

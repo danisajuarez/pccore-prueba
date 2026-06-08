@@ -1,0 +1,1 @@
+SELECT option_name, option_value FROM wp_options WHERE option_name LIKE '%woocommerce%product%table%' OR option_name LIKE '%woocommerce_feature%' OR option_name = 'woocommerce_hide_out_of_stock_items' OR option_name = 'woocommerce_catalog_columns' OR option_name = 'woocommerce_catalog_rows';

@@ -110,7 +110,11 @@ class ProductMapper
             'status' => $wcProduct['status'],
             'permalink' => $wcProduct['permalink'],
             'regular_price' => $wcProduct['regular_price'],
-            'stock_quantity' => $wcProduct['stock_quantity']
+            'stock_quantity' => $wcProduct['stock_quantity'],
+            'weight' => $wcProduct['weight'] ?? null,
+            'dimensions' => $wcProduct['dimensions'] ?? null,
+            'categories' => $wcProduct['categories'] ?? [],
+            'attributes' => $wcProduct['attributes'] ?? []
         ];
     }
 

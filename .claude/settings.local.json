@@ -39,7 +39,10 @@
       "Bash(xargs:*)",
       "Bash(composer dump-autoload:*)",
       "WebFetch(domain:pccoreprueba.antartidasige.com)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(grep -r \"categoriesList\" \"C:\\\\Users\\\\danis\\\\pccore-prueba\\\\php\\\\api\"\" --include=\"*.php \")",
+      "Bash(git -C \"C:/Users/danis/pccore-prueba\" remote:*)",
+      "WebFetch(domain:dlgarbe.com.ar)"
     ]
   }
 }

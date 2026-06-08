@@ -206,6 +206,14 @@ button.warning:hover {
     background: #d97706;
 }
 
+button.danger {
+    background: #dc2626;
+}
+
+button.danger:hover {
+    background: #b91c1c;
+}
+
 button.secondary {
     background: #475569;
 }

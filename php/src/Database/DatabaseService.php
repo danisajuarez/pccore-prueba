@@ -110,7 +110,17 @@ class DatabaseService
             throw new Exception("Error de conexión a BD SIGE: " . $this->connection->connect_error);
         }
 
-        $this->connection->set_charset("utf8");
+        // Detectar si el servidor usa latin1 y adaptarse
+        $res = $this->connection->query("SELECT @@character_set_database as cs");
+        $row = $res ? $res->fetch_assoc() : null;
+        $serverCharset = $row['cs'] ?? 'utf8';
+        $charset = (strpos($serverCharset, 'latin') !== false) ? 'latin1' : 'utf8mb4';
+        // @ suprime el warning en MySQL 5.x que no soporta utf8mb4
+        @$this->connection->set_charset($charset);
+        // Si utf8mb4 falló, caer a utf8
+        if ($this->connection->errno) {
+            $this->connection->set_charset('utf8');
+        }
     }
 
     /**

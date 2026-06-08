@@ -37,7 +37,7 @@ function getDb($config) {
     if ($conn->connect_error) {
         throw new Exception("Error de conexion: " . $conn->connect_error);
     }
-    $conn->set_charset("utf8");
+    $conn->set_charset("utf8mb4");
     return $conn;
 }
 

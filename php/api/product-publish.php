@@ -91,17 +91,24 @@ function buscarOCrearCategoria($nombre, $parentId = 0) {
 
     $nombre = trim($nombre);
 
-    // Buscar categoría existente
+    // Buscar categoría existente por nombre
     $categorias = wcRequest('/products/categories?search=' . urlencode($nombre) . '&per_page=100');
 
+    // 1. Primero buscar coincidencia exacta con mismo padre
     foreach ($categorias as $cat) {
-        // Coincidencia exacta (case-insensitive) y mismo padre
         if (strcasecmp($cat['name'], $nombre) === 0 && $cat['parent'] == $parentId) {
             return $cat['id'];
         }
     }
 
-    // Si no existe, crear
+    // 2. Reusar cualquier categoría con ese nombre exacto para evitar duplicados
+    foreach ($categorias as $cat) {
+        if (strcasecmp($cat['name'], $nombre) === 0) {
+            return $cat['id'];
+        }
+    }
+
+    // 3. No existe — crear nueva
     $newCat = wcRequest('/products/categories', 'POST', [
         'name' => $nombre,
         'parent' => $parentId
@@ -151,6 +158,7 @@ try {
     // Usar sige_pal_preartlis para precios y sige_ads_artdepsck para stock por depósito
     $listaPrecio = SIGE_LISTA_PRECIO;
     $deposito = SIGE_DEPOSITO;
+    // Query 1: datos del producto (con GROUP BY para sumar stock correctamente)
     $sql = "SELECT a.ART_IDArticulo as sku,
       a.ART_DesArticulo as nombre,
       a.ART_PartNumber as part_number,
@@ -162,8 +170,6 @@ try {
       d.ADV_Alto as alto,
       d.ADV_Ancho as ancho,
       d.ADV_Profundidad as profundidad,
-      attr.atr_descatr as attr_nombre,
-      attr.aat_descripcion as attr_valor,
       lin.LIN_DesLinea as categoria,
       gli.gli_descripcion as supracategoria,
       car.CAR_DesCatArt as marca
@@ -175,7 +181,6 @@ try {
   INNER JOIN sige_car_catarticulo car ON a.CAR_IdCar = car.CAR_IdCar
   INNER JOIN sige_mon_moneda m ON m.MON_IdMon = a.MON_IdMon
   LEFT JOIN sige_adv_artdatvar d ON a.ART_IDArticulo = d.art_idarticulo
-  LEFT JOIN sige_aat_artatrib attr ON a.ART_IDArticulo = attr.art_idarticulo
  WHERE a.ART_IDArticulo = ?
   AND s.DEP_IDDeposito IN ( $deposito )
   AND p.LIS_IDListaPrecio = $listaPrecio
@@ -193,36 +198,43 @@ try {
         exit();
     }
 
-    $producto = null;
+    $row = $result->fetch_assoc();
+    $producto = [
+        'sku' => trim($row['sku']),
+        'nombre' => $row['nombre'],
+        'part_number' => trim($row['part_number'] ?? ''),
+        'descripcion_larga' => $row['descripcion_larga'],
+        'precio_sin_iva' => $row['precio_sin_iva'],
+        'precio_final' => $row['precio_final'],
+        'stock' => $row['stock'],
+        'peso' => $row['peso'],
+        'alto' => $row['alto'],
+        'ancho' => $row['ancho'],
+        'profundidad' => $row['profundidad'],
+        'categoria' => $row['categoria'],
+        'supracategoria' => $row['supracategoria'],
+        'marca' => $row['marca']
+    ];
+
+    // Query 2: atributos del producto (query separada para traerlos todos)
     $atributos = [];
-
-    while ($row = $result->fetch_assoc()) {
-        if ($producto === null) {
-            $producto = [
-                'sku' => trim($row['sku']),
-                'nombre' => $row['nombre'],
-                'part_number' => trim($row['part_number'] ?? ''),
-                'descripcion_larga' => $row['descripcion_larga'],
-                'precio_sin_iva' => $row['precio_sin_iva'],
-                'precio_final' => $row['precio_final'],
-                'stock' => $row['stock'],
-                'peso' => $row['peso'],
-                'alto' => $row['alto'],
-                'ancho' => $row['ancho'],
-                'profundidad' => $row['profundidad'],
-                'categoria' => $row['categoria'],
-                'supracategoria' => $row['supracategoria'],
-                'marca' => $row['marca']
-            ];
-        }
-
-        if (!empty($row['attr_nombre']) && !empty($row['attr_valor'])) {
+    $sqlAttr = "SELECT atr_descatr as nombre, aat_descripcion as valor
+                FROM sige_aat_artatrib
+                WHERE TRIM(art_idarticulo) = ?
+                ORDER BY aat_orden";
+    $stmtAttr = $db->prepare($sqlAttr);
+    $stmtAttr->bind_param("s", $sku);
+    $stmtAttr->execute();
+    $resultAttr = $stmtAttr->get_result();
+    while ($attrRow = $resultAttr->fetch_assoc()) {
+        if (!empty($attrRow['nombre']) && !empty($attrRow['valor'])) {
             $atributos[] = [
-                'nombre' => $row['attr_nombre'],
-                'valor' => $row['attr_valor']
+                'nombre' => $attrRow['nombre'],
+                'valor' => $attrRow['valor']
             ];
         }
     }
+    $stmtAttr->close();
 
     $db->close();
 
@@ -294,15 +306,8 @@ try {
         $categoryIds[] = ['id' => $supracategoriaId];
     }
 
-    // ========================================
-    // MARCA COMO ATRIBUTO
-    // ========================================
-    if (!empty($producto['marca'])) {
-        $atributos[] = [
-            'nombre' => 'Marca',
-            'valor' => $producto['marca']
-        ];
-    }
+    // La marca va por el plugin de brands, no como atributo genérico
+    $marcaToSync = !empty($producto['marca']) ? trim($producto['marca']) : null;
 
     // Enviar precio CON IVA - WooCommerce no calcula nada
     $precioFinal = number_format((float) ($producto['precio_final'] ?? 0), 2, '.', '');
@@ -310,20 +315,19 @@ try {
 
     $nombre = trim($producto['nombre']);
     $descripcionLarga = trim($producto['descripcion_larga'] ?? '');
+    $descripcionCorta = trim($inputDescripcionML ?? '');
 
-    // Si no hay descripción en SIGE, usar la de ML si viene
-    if (empty($descripcionLarga) && !empty($inputDescripcionML)) {
-        $descripcionLarga = trim($inputDescripcionML);
-    }
-
+    $stockQty = (int) ($producto['stock'] ?? 0);
     $productData = [
         'sku' => $producto['sku'],
         'name' => $nombre,
-        'short_description' => $nombre,
-        'description' => !empty($descripcionLarga) ? $descripcionLarga : $nombre,
+        'short_description' => $descripcionCorta,
+        'description' => !empty($descripcionLarga) ? $descripcionLarga : $descripcionCorta,
         'regular_price' => $precioFinal,
-        'stock_quantity' => (int) ($producto['stock'] ?? 0),
+        'stock_quantity' => $stockQty,
+        'stock_status' => $stockQty > 0 ? 'instock' : 'outofstock',
         'manage_stock' => true,
+        'catalog_visibility' => 'visible',
         'status' => 'publish',
         'type' => 'simple',
         'meta_data' => [
@@ -365,12 +369,22 @@ try {
     if (!empty($atributos)) {
         $wcAttributes = [];
         foreach ($atributos as $attr) {
-            $wcAttributes[] = [
-                'name' => trim($attr['nombre']),
-                'options' => [trim($attr['valor'])],
-                'visible' => true,
-                'variation' => false
-            ];
+            $globalId = buscarOCrearAtributoGlobal(trim($attr['nombre']));
+            if ($globalId) {
+                $wcAttributes[] = [
+                    'id' => $globalId,
+                    'options' => [trim($attr['valor'])],
+                    'visible' => true,
+                    'variation' => false
+                ];
+            } else {
+                $wcAttributes[] = [
+                    'name' => trim($attr['nombre']),
+                    'options' => [trim($attr['valor'])],
+                    'visible' => true,
+                    'variation' => false
+                ];
+            }
         }
         $productData['attributes'] = $wcAttributes;
     }
@@ -400,6 +414,14 @@ try {
     }
 
     // ========================================
+    // SINCRONIZAR MARCA CON PLUGIN DE BRANDS
+    // ========================================
+    $brandSynced = null;
+    if (!empty($response['id']) && $marcaToSync) {
+        $brandSynced = syncBrandToWooCommerce($response['id'], $marcaToSync);
+    }
+
+    // ========================================
     // MARCAR COMO PUBLICADO EN SIGE (art_articuloweb = 'S')
     // ========================================
     if (!empty($response['id'])) {
@@ -420,6 +442,11 @@ try {
     echo json_encode([
         'success' => true,
         'message' => $mensaje,
+        'debug' => [
+            'atributos_sige' => count($atributos),
+            'atributos_enviados' => !empty($productData['attributes']) ? count($productData['attributes']) : 0
+        ],
+        'brand_sync' => $brandSynced,
         'product' => [
             'id' => $response['id'],
             'sku' => $response['sku'],
@@ -438,4 +465,65 @@ try {
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+}
+
+function buscarOCrearAtributoGlobal(string $nombre): ?int {
+    try {
+        $atributos = wcRequest('/products/attributes?per_page=100');
+        foreach ($atributos as $atr) {
+            if (strcasecmp($atr['name'], $nombre) === 0) {
+                return (int) $atr['id'];
+            }
+        }
+        $nuevo = wcRequest('/products/attributes', 'POST', [
+            'name' => $nombre,
+            'type' => 'select',
+            'has_archives' => false
+        ]);
+        return isset($nuevo['id']) ? (int) $nuevo['id'] : null;
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function syncBrandToWooCommerce($productId, $brandName) {
+    try {
+        $brands = wcRequest('/products/brands?search=' . urlencode($brandName));
+        $brandId = null;
+        $wasCreated = false;
+
+        if (!empty($brands)) {
+            foreach ($brands as $brand) {
+                if (strtolower($brand['name']) === strtolower($brandName)) {
+                    $brandId = $brand['id'];
+                    break;
+                }
+            }
+        }
+
+        if (!$brandId) {
+            $newBrand = wcRequest('/products/brands', 'POST', ['name' => $brandName]);
+            if (isset($newBrand['id'])) {
+                $brandId = $newBrand['id'];
+                $wasCreated = true;
+            }
+        }
+
+        if ($brandId) {
+            wcRequest('/products/' . $productId, 'PUT', [
+                'brands' => [['id' => $brandId]]
+            ]);
+            return [
+                'success' => true,
+                'brand_id' => $brandId,
+                'brand_name' => $brandName,
+                'action' => $wasCreated ? 'created_and_assigned' : 'assigned'
+            ];
+        }
+
+        return ['success' => false, 'error' => 'No se pudo crear/encontrar la marca'];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
 }

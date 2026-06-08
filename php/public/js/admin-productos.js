@@ -95,6 +95,7 @@ function mostrarProducto() {
                 <button onclick="sincronizarTodo()">🔄 Sincronizar Todo</button>
                 <button class="secondary" onclick="sincronizarProducto()">💰 Precio/Stock</button>
                 <button class="warning" onclick="desactivarProducto()">⏸️ Desactivar</button>
+                <button class="danger" onclick="republicarProducto()">🔃 Republicar</button>
                 <a href="${wooProducto.permalink}" target="_blank" class="link-btn">🌐 Ver en Web</a>
             `;
         } else {
@@ -103,6 +104,7 @@ function mostrarProducto() {
             actionsEl.innerHTML = `
                 <button class="success" onclick="activarProducto()">▶️ Activar</button>
                 <button onclick="sincronizarTodo()">🔄 Sincronizar Todo</button>
+                <button class="danger" onclick="republicarProducto()">🔃 Republicar</button>
             `;
         }
     } else {
@@ -157,6 +159,32 @@ async function publicarProducto() {
     }
 }
 
+async function republicarProducto() {
+    if (!productoActual) return;
+    if (!confirm(`¿Republicar "${productoActual.nombre}"?\n\nEsto borrará el producto de WooCommerce y lo volverá a crear desde cero. Útil para arreglar productos que no aparecen en categorías.`)) return;
+
+    addLog(`Republicando ${productoActual.sku}...`, '');
+
+    try {
+        const response = await fetch(`${API_BASE}/product-republish.php?api_key=${API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sku: productoActual.sku })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            addLog(`✓ Republicado OK (ID: ${data.paso2_publicar?.producto_id})`, 'success');
+            // Recargar producto
+            setTimeout(() => buscarProducto(), 1000);
+        } else {
+            addLog(`✗ Error: ${data.error}`, 'error');
+        }
+    } catch (error) {
+        addLog(`✗ Error: ${error.message}`, 'error');
+    }
+}
+
 async function sincronizarTodo() {
     if (!wooProducto || !productoActual) return;
 
@@ -179,6 +207,10 @@ async function sincronizarTodo() {
         if (productoActual.profundidad) datos.profundidad = productoActual.profundidad;
         if (productoActual.atributos?.length > 0) datos.atributos = productoActual.atributos;
 
+        // Categorías de SIGE
+        if (productoActual.categoria) datos.categoria = productoActual.categoria;
+        if (productoActual.supracategoria) datos.supracategoria = productoActual.supracategoria;
+
         const response = await fetch(`${API_BASE}/product-update.php?api_key=${API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -187,7 +219,7 @@ async function sincronizarTodo() {
         const data = await response.json();
 
         if (data.success) {
-            addLog(`✓ Sincronizado: precio, stock, dimensiones, atributos`, 'success');
+            addLog(`✓ Sincronizado: precio, stock, dimensiones, atributos, categorías`, 'success');
         } else {
             addLog(`✗ Error: ${data.error || data.errors?.join(', ')}`, 'error');
         }
