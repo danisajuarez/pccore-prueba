@@ -3,9 +3,10 @@
  * Configuración y funciones para Mercado Libre
  */
 
-// Credenciales de Mercado Libre
-define('ML_APP_ID', '828139284413193');
-define('ML_CLIENT_SECRET', 'Xeru5mcUpEtxFwoDeLjvAh2qsQYspzLP');
+// Credenciales de Mercado Libre (cargadas desde config/secrets.php - NO hardcodear)
+require_once __DIR__ . '/load_secrets.php';
+define('ML_APP_ID', pccore_secret('ML_APP_ID'));
+define('ML_CLIENT_SECRET', pccore_secret('ML_CLIENT_SECRET'));
 define('ML_SITE', 'MLA'); // Argentina
 
 // Archivo para guardar el token

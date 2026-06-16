@@ -1,0 +1,18 @@
+# Credenciales / secretos (NUNCA subir al repo)
+php/config/secrets.php
+**/secrets.php
+*.env
+.env
+.env.*
+!.env.example
+php/config/ml_token.json
+**/ml_token.json
+
+# Dependencias
+node_modules/
+vendor/
+
+# Logs y temporales
+*.log
+.DS_Store
+Thumbs.db

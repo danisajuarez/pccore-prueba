@@ -18,8 +18,9 @@ class TokenManager
         ?string $clientSecret = null,
         ?string $tokenFile = null
     ) {
-        $this->appId = $appId ?? '828139284413193';
-        $this->clientSecret = $clientSecret ?? 'zkXFOW1IOODosHBEkeJmjBKLCzG9AFq2';
+        require_once dirname(__DIR__, 2) . '/config/load_secrets.php';
+        $this->appId = $appId ?? pccore_secret('ML_APP_ID');
+        $this->clientSecret = $clientSecret ?? pccore_secret('ML_CLIENT_SECRET');
         $this->tokenFile = $tokenFile ?? dirname(__DIR__, 2) . '/config/ml_token.json';
     }
 

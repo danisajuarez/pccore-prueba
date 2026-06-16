@@ -96,7 +96,10 @@ if ($r5) {
 $resultado['ejemplos_diferencias'] = $ejemplos;
 
 // PASO 7: Test WooCommerce API
-$wc_url = 'https://pccore.com.ar/wp-json/wc/v3/products?per_page=1&consumer_key=ck_28e04bbb3d5000fb9240cac6bb64ad2597aff0df&consumer_secret=cs_b6442994d793997f0f9c829b8cdf3c38b3231c28';
+require_once __DIR__ . '/../config/load_secrets.php';
+$wc_url = pccore_secret('WC_URL') . '/products?per_page=1'
+    . '&consumer_key=' . urlencode(pccore_secret('WC_KEY'))
+    . '&consumer_secret=' . urlencode(pccore_secret('WC_SECRET'));
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $wc_url);

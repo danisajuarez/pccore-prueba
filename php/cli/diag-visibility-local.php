@@ -3,10 +3,11 @@
  * CLI: Diagnosticar visibilidad de productos - PCCore
  */
 
+require_once __DIR__ . '/../config/load_secrets.php';
 $config = [
-    'wc_url' => 'https://pccore.com.ar/wp-json/wc/v3',
-    'wc_key' => 'ck_28e04bbb3d5000fb9240cac6bb64ad2597aff0df',
-    'wc_secret' => 'cs_b6442994d793997f0f9c829b8cdf3c38b3231c28'
+    'wc_url' => pccore_secret('WC_URL'),
+    'wc_key' => pccore_secret('WC_KEY'),
+    'wc_secret' => pccore_secret('WC_SECRET')
 ];
 
 $action = $argv[1] ?? 'diagnose';
